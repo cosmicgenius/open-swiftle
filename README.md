@@ -6,7 +6,7 @@ A Taylor Swift song guessing game inspired by Wordle.
 
 1. Install dependencies: `npm install`
 2. Copy `.env.example` to `.env` and set your `DAILY_SEED_SECRET`
-3. Add Taylor Swift song files to the `songs/` directory (see below)
+3. Add song files to the `songs/` directory (see below)
 4. Run setup script: `npm run setup`
 5. Start the server: `npm start` (or `npm run dev` for development)
 
@@ -28,17 +28,11 @@ Set your `DAILY_SEED_SECRET` to a unique value - this ensures your daily songs a
 
 ## Adding Songs
 
-**Important**: You must legally obtain Taylor Swift songs yourself. This could be through:
-- Purchasing from iTunes, Amazon Music, etc.
-- Downloading from streaming services you subscribe to (where permitted)
-- Converting from CDs you own
-- Other legitimate sources
-
 1. Place MP3 or WAV files in the `songs/` directory
 2. Name files as: "Artist - Song Title.extension" (e.g., "Taylor Swift - Love Story.mp3")
 3. Run `npm run setup` to update the database
 
-**Note**: The repository does not include any copyrighted music files.
+**Note**: Use royalty-free music or songs you have legal rights to use. For Taylor Swift songs specifically, see the `spotify-integration` branch for a Spotify Web API approach.
 
 ## Requirements
 

@@ -13,12 +13,8 @@ class Database {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         artist TEXT NOT NULL,
-        album TEXT,
-        spotify_uri TEXT NOT NULL,
-        track_id TEXT NOT NULL,
-        duration_ms INTEGER,
-        preview_url TEXT,
-        popularity INTEGER,
+        filename TEXT NOT NULL,
+        duration REAL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
@@ -43,10 +39,10 @@ class Database {
     });
   }
 
-  addSong(title, artist, album, spotifyUri, trackId, durationMs, previewUrl, popularity) {
+  addSong(title, artist, filename, duration) {
     return new Promise((resolve, reject) => {
-      const stmt = this.db.prepare(`INSERT INTO songs (title, artist, album, spotify_uri, track_id, duration_ms, preview_url, popularity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-      stmt.run([title, artist, album, spotifyUri, trackId, durationMs, previewUrl, popularity], function(err) {
+      const stmt = this.db.prepare(`INSERT INTO songs (title, artist, filename, duration) VALUES (?, ?, ?, ?)`);
+      stmt.run([title, artist, filename, duration], function(err) {
         if (err) reject(err);
         else resolve(this.lastID);
       });
