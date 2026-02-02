@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open Swiftle</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 Open Swiftle 🎵</h1>
+            <p>Guess the Taylor Swift song in 6 tries!</p>
+        </header>
+
+        <div class="game-modes">
+            <button id="daily-mode" class="mode-btn active">Daily Mode</button>
+            <button id="freeplay-mode" class="mode-btn">Freeplay</button>
+        </div>
+
+        <div id="game-area" class="game-area">
+            <div class="audio-section">
+                <audio id="audio-player" controls>
+                    <source src="" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+                <div class="audio-info">
+                    <span id="clip-duration">0s</span> revealed
+                </div>
+            </div>
+
+            <div class="guess-section">
+                <div class="guess-input-area">
+                    <input 
+                        type="text" 
+                        id="guess-input" 
+                        placeholder="Enter your guess..."
+                        maxlength="100"
+                    >
+                    <button id="submit-guess" disabled>Guess</button>
+                </div>
+                <div id="guess-counter">
+                    Guesses remaining: <span id="guesses-remaining">6</span>
+                </div>
+            </div>
+
+            <div id="guesses-list" class="guesses-list">
+                <!-- Previous guesses will appear here -->
+            </div>
+
+            <div id="game-result" class="game-result hidden">
+                <div id="result-message"></div>
+                <button id="play-again">Play Again</button>
+            </div>
+        </div>
+
+        <div id="start-screen" class="start-screen">
+            <div class="welcome-message">
+                <h2>Welcome to Open Swiftle!</h2>
+                <p>Listen to clips of Taylor Swift songs and try to guess the title.</p>
+                <ul>
+                    <li>🎵 6 guesses to get it right</li>
+                    <li>⏱️ Each wrong guess reveals more of the song</li>
+                    <li>🗓️ New daily song every day</li>
+                    <li>🎮 Unlimited freeplay mode available</li>
+                </ul>
+                <button id="start-game" class="start-btn">Start Playing</button>
+            </div>
+        </div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+
+        <div id="error-message" class="error-message hidden">
+            <p id="error-text"></p>
+            <button id="retry-btn">Retry</button>
+        </div>
+    </div>
+
+    <footer>
+        <p>Open source Taylor Swift guessing game • Not affiliated with Taylor Swift</p>
+    </footer>
+
+    <script src="game.js"></script>
+</body>
+</html>

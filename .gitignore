@@ -1,0 +1,7 @@
+node_modules/
+audio/clips/
+songs/*.mp3
+songs/*.wav
+.env
+*.log
+*.db

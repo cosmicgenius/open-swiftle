@@ -1,0 +1,26 @@
+{
+  "name": "open-swiftle",
+  "version": "1.0.0",
+  "description": "A Taylor Swift song guessing game inspired by Wordle",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "setup": "node scripts/setup.js",
+    "import-spotify": "node scripts/importSpotifySongs.js"
+  },
+  "keywords": ["taylor-swift", "music", "game", "wordle"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.0",
+    "express-session": "^1.17.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
