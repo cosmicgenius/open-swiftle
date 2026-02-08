@@ -110,8 +110,11 @@ open-swiftle/
       setup.ts          # Song import CLI
   public/               # Frontend (vanilla HTML/CSS/JS)
     index.html
+    freeplay.html
     styles.css
-    game.js
+    daily.js
+    freeplay.js
+    game-core.js
   songs/                # Audio files (git-ignored)
   audio/cache/          # Generated clips (git-ignored)
   dist/                 # Compiled JS (git-ignored)
