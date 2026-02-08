@@ -27,20 +27,23 @@
                 <div class="audio-info">
                     <span id="clip-duration">0s</span> revealed
                 </div>
+                <div id="freeplay-progress-wrap" class="freeplay-progress-wrap hidden" aria-hidden="true">
+                    <div id="freeplay-progress-bar" class="freeplay-progress-bar"></div>
+                </div>
             </div>
 
             <div class="guess-section">
                 <div class="guess-input-area">
-                    <input 
-                        type="text" 
-                        id="guess-input" 
-                        placeholder="Enter your guess..."
-                        maxlength="100"
-                    >
+                    <select id="guess-select">
+                        <option value="">Select a song...</option>
+                    </select>
                     <button id="submit-guess" disabled>Guess</button>
                 </div>
                 <div id="guess-counter">
                     Guesses remaining: <span id="guesses-remaining">6</span>
+                </div>
+                <div id="freeplay-score" class="freeplay-score hidden">
+                    Correct before loss: <span id="freeplay-score-value">0</span>
                 </div>
             </div>
 
@@ -64,6 +67,12 @@
                     <li>🗓️ New daily song every day</li>
                     <li>🎮 Unlimited freeplay mode available</li>
                 </ul>
+                <div id="freeplay-options" class="freeplay-options hidden">
+                    <label>
+                        <input id="freeplay-hard-mode" type="checkbox">
+                        Hard mode: one wrong guess ends the run
+                    </label>
+                </div>
                 <button id="start-game" class="start-btn">Start Playing</button>
             </div>
         </div>

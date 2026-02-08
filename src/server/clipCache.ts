@@ -38,53 +38,56 @@ export class ClipCache {
   }
 
   // Get or generate clips for a given cache key (date for daily, sessionId for freeplay)
-  async getDailyClips(
+  async getClips(
     cacheKey: string,
     song: Song,
-    startTime: number
+    startTime: number,
+    durations: number[]
   ): Promise<CachedClip[]> {
     const keyDir = path.join(this.cacheDir, cacheKey);
     const filePrefix = `${song.id}_${Math.floor(startTime)}`;
+    const sortedDurations = [...durations].sort((a, b) => a - b);
 
     await fs.mkdir(keyDir, { recursive: true });
 
-    // Check if all 6 clips already exist
+    // Check if all requested clips already exist
     const clips: CachedClip[] = [];
-    let allExist = true;
+    const missing: number[] = [];
 
-    for (let duration = 1; duration <= 6; duration++) {
+    for (const duration of sortedDurations) {
       const clipPath = path.join(keyDir, `${filePrefix}_${duration}s.json`);
       try {
         const raw = await fs.readFile(clipPath, 'utf8');
         clips.push({ duration, data: JSON.parse(raw), path: clipPath });
       } catch {
-        allExist = false;
-        break;
+        missing.push(duration);
       }
     }
 
-    if (allExist) return clips;
+    if (missing.length === 0) return clips;
 
-    // Generate all 6 clips
-    console.log(`Generating clips for key=${cacheKey}, song=${song.title}...`);
-    const newClips = await this.generateClips(song, startTime, 6);
+    console.log(
+      `Generating clips for key=${cacheKey}, song=${song.title}, durations=${missing.join(',')}...`
+    );
+    const newClips = await this.generateClips(song, startTime, missing);
 
-    for (let i = 0; i < newClips.length; i++) {
-      const clipPath = path.join(keyDir, `${filePrefix}_${i + 1}s.json`);
-      await fs.writeFile(clipPath, JSON.stringify(newClips[i]));
+    for (const clip of newClips) {
+      const clipPath = path.join(keyDir, `${filePrefix}_${clip.duration}s.json`);
+      await fs.writeFile(clipPath, JSON.stringify(clip));
+      clips.push({
+        duration: clip.duration,
+        data: clip,
+        path: clipPath,
+      });
     }
 
-    return newClips.map((clip, i) => ({
-      duration: i + 1,
-      data: clip,
-      path: path.join(keyDir, `${filePrefix}_${i + 1}s.json`),
-    }));
+    return clips.sort((a, b) => a.duration - b.duration);
   }
 
   private async generateClips(
     song: Song,
     startTime: number,
-    maxDuration: number
+    durations: number[]
   ): Promise<ClipData[]> {
     const sourceFile = path.join(__dirname, '../../songs', song.filename);
 
@@ -94,7 +97,7 @@ export class ClipCache {
 
     const clips: ClipData[] = [];
 
-    for (let duration = 1; duration <= maxDuration; duration++) {
+    for (const duration of durations) {
       const audioBuffer = await this.extractClip(sourceFile, startTime, duration);
 
       clips.push({

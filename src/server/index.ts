@@ -16,28 +16,70 @@ const db = new Database();
 const clipCache = new ClipCache();
 const gameLogic = new GameLogic(db);
 
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+function createRateLimiter(maxRequests: number, windowMs: number) {
+  const hits = new Map<string, RateLimitEntry>();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction): void => {
+    const now = Date.now();
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const current = hits.get(key);
+
+    if (!current || current.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      next();
+      return;
+    }
+
+    current.count += 1;
+    if (current.count > maxRequests) {
+      const retryAfter = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      res.set('Retry-After', String(retryAfter));
+      res.status(429).json({ error: 'Rate limit exceeded. Please retry shortly.' });
+      return;
+    }
+
+    next();
+  };
+}
+
+const startLimiter = createRateLimiter(30, 60_000);
+const audioLimiter = createRateLimiter(180, 60_000);
+const guessLimiter = createRateLimiter(60, 60_000);
+const timeoutLimiter = createRateLimiter(60, 60_000);
+const statusLimiter = createRateLimiter(120, 60_000);
+const songsLimiter = createRateLimiter(30, 60_000);
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../../public')));
+app.set('trust proxy', 1);
 
 // Start a new game
-app.post('/api/game/start', async (req, res) => {
+app.post('/api/game/start', startLimiter, async (req, res) => {
   try {
-    const { mode = 'daily', clientId = 'anonymous' } = req.body;
+    const { mode = 'daily', clientId = 'anonymous', freeplayHard = false } = req.body;
 
     if (mode !== 'daily' && mode !== 'freeplay') {
       return res.status(400).json({ error: 'Invalid game mode' });
     }
 
-    const session = await gameLogic.createGameSession(mode, clientId);
+    const session = await gameLogic.createGameSession(mode, clientId, {
+      freeplayHard: Boolean(freeplayHard),
+    });
 
-    const maxGuesses = mode === 'freeplay' ? 1 : 6;
+    const maxGuesses = mode === 'daily' ? 6 : session.freeplayHard ? 1 : null;
     res.json({
       sessionId: session.id,
       mode: session.mode,
+      freeplayHard: session.freeplayHard,
       maxGuesses,
-      guessesRemaining: maxGuesses,
+      guessesRemaining: maxGuesses === null ? null : maxGuesses,
       completed: false,
     });
   } catch (error) {
@@ -47,7 +89,7 @@ app.post('/api/game/start', async (req, res) => {
 });
 
 // Get audio clip for current guess
-app.get('/api/game/:sessionId/audio/:guessNumber', async (req, res) => {
+app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res) => {
   try {
     const { sessionId, guessNumber } = req.params;
     const guess = parseInt(guessNumber, 10);
@@ -83,7 +125,8 @@ app.get('/api/game/:sessionId/audio/:guessNumber', async (req, res) => {
     // Both modes: use start_time stored on the session
     const startTime = session.start_time;
     const cacheKey = session.mode === 'daily' ? session.date! : session.id;
-    const clips = await clipCache.getDailyClips(cacheKey, song, startTime);
+    const clipDurations = session.mode === 'daily' ? [1, 2, 3, 4, 5, 6] : [6];
+    const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations);
     const clip = clips.find((c) => c.duration === guess);
 
     if (!clip?.data?.audioData) {
@@ -106,18 +149,29 @@ app.get('/api/game/:sessionId/audio/:guessNumber', async (req, res) => {
 });
 
 // Make a guess
-app.post('/api/game/:sessionId/guess', async (req, res) => {
+app.post('/api/game/:sessionId/guess', guessLimiter, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { guess } = req.body;
+    const { guessSongId } = req.body;
+    const parsedGuessSongId = Number(guessSongId);
 
-    if (!guess || typeof guess !== 'string') {
-      return res.status(400).json({ error: 'Invalid guess' });
+    if (!Number.isInteger(parsedGuessSongId) || parsedGuessSongId <= 0) {
+      return res.status(400).json({ error: 'Invalid guess. Select a song from the list.' });
     }
 
-    const result = await gameLogic.makeGuess(sessionId, guess);
+    const guessedSong = await db.getSongById(parsedGuessSongId);
+    if (!guessedSong) {
+      return res.status(400).json({ error: 'Invalid guess. Song does not exist.' });
+    }
 
-    res.json({ ...result, guessesRemaining: 6 - result.totalGuesses });
+    const result = await gameLogic.makeGuess(sessionId, guessedSong);
+    res.json({
+      ...result,
+      guessesRemaining:
+        result.maxGuesses === null
+          ? null
+          : Math.max(0, result.maxGuesses - result.totalGuesses),
+    });
   } catch (error: any) {
     console.error('Error making guess:', error);
 
@@ -135,8 +189,45 @@ app.post('/api/game/:sessionId/guess', async (req, res) => {
   }
 });
 
+// Expire a session (used for freeplay round timeout)
+app.post('/api/game/:sessionId/timeout', timeoutLimiter, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await db.getGameSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Game session not found' });
+    }
+    if (session.mode !== 'freeplay') {
+      return res.status(400).json({ error: 'Timeout endpoint is only valid for freeplay mode' });
+    }
+
+    const result = await gameLogic.expireSession(sessionId);
+    res.json({
+      ...result,
+      guessesRemaining:
+        result.maxGuesses === null
+          ? null
+          : Math.max(0, result.maxGuesses - result.totalGuesses),
+    });
+  } catch (error: any) {
+    console.error('Error expiring session:', error);
+
+    if (error.message === 'Game session not found') {
+      return res.status(404).json({ error: error.message });
+    }
+    if (
+      error.message === 'Game already completed' ||
+      error.message === 'Maximum guesses exceeded'
+    ) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    res.status(500).json({ error: 'Failed to expire session' });
+  }
+});
+
 // Get game status
-app.get('/api/game/:sessionId/status', async (req, res) => {
+app.get('/api/game/:sessionId/status', statusLimiter, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const session = await db.getGameSession(sessionId);
@@ -145,12 +236,16 @@ app.get('/api/game/:sessionId/status', async (req, res) => {
     }
 
     const song = await db.getSongById(session.song_id);
+    const maxGuesses = session.mode === 'daily' ? 6 : session.freeplay_hard ? 1 : null;
 
     res.json({
       sessionId: session.id,
       mode: session.mode,
+      freeplayHard: session.freeplay_hard,
       guesses: session.guesses ?? [],
-      guessesRemaining: 6 - (session.guesses ?? []).length,
+      maxGuesses,
+      guessesRemaining:
+        maxGuesses === null ? null : Math.max(0, maxGuesses - (session.guesses ?? []).length),
       completed: session.completed,
       won: session.won,
       correctAnswer: session.completed ? song?.title : null,
@@ -162,7 +257,7 @@ app.get('/api/game/:sessionId/status', async (req, res) => {
 });
 
 // Songs list (admin)
-app.get('/api/admin/songs', async (_req, res) => {
+app.get('/api/admin/songs', songsLimiter, async (_req, res) => {
   try {
     const songs = await db.getAllSongs();
     res.json(songs);
@@ -177,8 +272,8 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Serve frontend
-app.get('/', (_req, res) => {
+// Serve frontend routes
+app.get(['/', '/freeplay'], (_req, res) => {
   res.sendFile(path.join(__dirname, '../../public/index.html'));
 });
 

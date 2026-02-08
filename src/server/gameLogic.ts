@@ -12,6 +12,7 @@ interface GameSessionData {
   id: string;
   songId: number;
   mode: 'daily' | 'freeplay';
+  freeplayHard: boolean;
   date: string | null;
   guesses: GuessResult[];
   completed: boolean;
@@ -22,8 +23,17 @@ interface GameSessionData {
 export interface GuessResponse extends GuessResult {
   completed: boolean;
   won: boolean;
+  timedOut: boolean;
   correctAnswer: string | null;
+  correctSong:
+    | {
+      title: string;
+      artist: string;
+      album: string | null;
+    }
+    | null;
   totalGuesses: number;
+  maxGuesses: number | null;
 }
 
 export class GameLogic {
@@ -50,6 +60,8 @@ export class GameLogic {
     const startTime = this.seededRandom(seedValue + 1, 0, maxStartTime);
 
     await this.db.setDailySong(gameDate, selectedSong.id, startTime);
+    const saved = await this.db.getDailySong(gameDate);
+    if (saved) return saved;
 
     return { ...selectedSong, start_time: startTime, date: gameDate };
   }
@@ -67,9 +79,11 @@ export class GameLogic {
 
   async createGameSession(
     mode: 'daily' | 'freeplay',
-    clientId: string
+    clientId: string,
+    options?: { freeplayHard?: boolean }
   ): Promise<GameSessionData> {
     const sessionId = this.generateSessionId(clientId);
+    const freeplayHard = mode === 'freeplay' && options?.freeplayHard === true;
 
     let song: Song & { start_time: number };
     let gameDate: string | null = null;
@@ -85,6 +99,7 @@ export class GameLogic {
       id: sessionId,
       songId: song.id,
       mode,
+      freeplayHard,
       date: gameDate,
       guesses: [],
       completed: false,
@@ -98,13 +113,13 @@ export class GameLogic {
     };
 
     await this.db.saveGameSession(
-      sessionId, song.id, mode, gameDate, song.start_time, [], false, false
+      sessionId, song.id, mode, freeplayHard, gameDate, song.start_time, [], false, false
     );
 
     return session;
   }
 
-  async makeGuess(sessionId: string, guess: string): Promise<GuessResponse> {
+  async makeGuess(sessionId: string, guessedSong: Song): Promise<GuessResponse> {
     const session = await this.db.getGameSession(sessionId);
     if (!session) throw new Error('Game session not found');
     if (session.completed) throw new Error('Game already completed');
@@ -114,14 +129,29 @@ export class GameLogic {
 
     const guesses = session.guesses ?? [];
     const guessNumber = guesses.length + 1;
-    const maxGuesses = session.mode === 'freeplay' ? 1 : 6;
-    if (guessNumber > maxGuesses) throw new Error('Maximum guesses exceeded');
+    const maxGuesses = this.getMaxGuesses(session.mode, session.freeplay_hard);
+    if (maxGuesses !== null && guessNumber > maxGuesses) {
+      throw new Error('Maximum guesses exceeded');
+    }
 
-    const isCorrect = this.isCorrectGuess(guess.trim(), song.title);
-    const completed = isCorrect || guessNumber >= maxGuesses;
+    const isCorrect = guessedSong.id === song.id;
+    const albumMatch =
+      !isCorrect &&
+      this.hasAlbum(guessedSong.album) &&
+      this.hasAlbum(song.album) &&
+      this.normalize(guessedSong.album) === this.normalize(song.album);
+    const matchLevel: GuessResult['matchLevel'] = isCorrect
+      ? 'correct_song'
+      : albumMatch
+        ? 'correct_album'
+        : 'incorrect';
+    const completed = isCorrect || (maxGuesses !== null && guessNumber >= maxGuesses);
 
     const guessResult: GuessResult = {
-      guess: guess.trim(),
+      guess: guessedSong.title,
+      guessSongId: guessedSong.id,
+      guessAlbum: guessedSong.album,
+      matchLevel,
       correct: isCorrect,
       guessNumber,
     };
@@ -132,6 +162,7 @@ export class GameLogic {
       sessionId,
       session.song_id,
       session.mode,
+      session.freeplay_hard,
       session.date,
       session.start_time,
       guesses,
@@ -143,36 +174,85 @@ export class GameLogic {
       ...guessResult,
       completed,
       won: isCorrect,
+      timedOut: false,
       correctAnswer: completed ? song.title : null,
+      correctSong: completed
+        ? {
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+        }
+        : null,
       totalGuesses: guesses.length,
+      maxGuesses,
     };
   }
 
-  private isCorrectGuess(guess: string, correctTitle: string): boolean {
-    const normalize = (str: string) =>
-      str
-        .toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+  async expireSession(sessionId: string): Promise<GuessResponse> {
+    const session = await this.db.getGameSession(sessionId);
+    if (!session) throw new Error('Game session not found');
+    if (session.completed) throw new Error('Game already completed');
 
-    const normalizedGuess = normalize(guess);
-    const normalizedTitle = normalize(correctTitle);
+    const song = await this.db.getSongById(session.song_id);
+    if (!song) throw new Error('Song not found');
 
-    if (normalizedGuess === normalizedTitle) return true;
+    const guesses = session.guesses ?? [];
+    const guessNumber = guesses.length + 1;
+    const maxGuesses = this.getMaxGuesses(session.mode, session.freeplay_hard);
+    if (maxGuesses !== null && guessNumber > maxGuesses) {
+      throw new Error('Maximum guesses exceeded');
+    }
 
-    const guessWords = normalizedGuess.split(' ').filter((w) => w.length > 2);
-    const titleWords = normalizedTitle.split(' ').filter((w) => w.length > 2);
+    const guessResult: GuessResult = {
+      guess: '(No guess)',
+      guessSongId: -1,
+      guessAlbum: null,
+      matchLevel: 'incorrect',
+      correct: false,
+      guessNumber,
+    };
 
-    if (titleWords.length === 0) return false;
+    guesses.push(guessResult);
 
-    const matchedWords = titleWords.filter((word) =>
-      guessWords.some(
-        (guessWord) => guessWord.includes(word) || word.includes(guessWord)
-      )
+    await this.db.saveGameSession(
+      sessionId,
+      session.song_id,
+      session.mode,
+      session.freeplay_hard,
+      session.date,
+      session.start_time,
+      guesses,
+      true,
+      false
     );
 
-    return matchedWords.length >= Math.min(titleWords.length, 2);
+    return {
+      ...guessResult,
+      completed: true,
+      won: false,
+      timedOut: true,
+      correctAnswer: song.title,
+      correctSong: {
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+      },
+      totalGuesses: guesses.length,
+      maxGuesses,
+    };
+  }
+
+  private getMaxGuesses(mode: 'daily' | 'freeplay', freeplayHard: boolean): number | null {
+    if (mode === 'daily') return 6;
+    return freeplayHard ? 1 : null;
+  }
+
+  private normalize(value: string | null | undefined): string {
+    return (value ?? '').trim().toLowerCase();
+  }
+
+  private hasAlbum(value: string | null | undefined): boolean {
+    return this.normalize(value).length > 0;
   }
 
   private generateSessionId(clientId: string): string {

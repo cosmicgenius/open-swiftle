@@ -142,7 +142,7 @@ FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer i
 
 4. **Seeded daily randomization.** The daily song is determined by `SHA-256(date + DAILY_SEED_SECRET)`. Without the secret, players can't predict tomorrow's song even with full access to the source code and song list.
 
-5. **Normalized guess matching.** Guesses are lowercased, stripped of punctuation, and whitespace-normalized before comparison. This prevents trivial failures from formatting differences.
+5. **Catalog-constrained guessing.** The client loads the song catalog and submits `guessSongId` (not free text). The server rejects unknown IDs and validates exact song identity.
 
 ### Latency Optimization
 
@@ -154,7 +154,7 @@ FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer i
 
 ## Adding Songs
 
-Place MP3 or WAV files in `songs/` and run `npm run setup`. The filename format determines metadata:
+Place MP3 or WAV files in `songs/` and run `npm run setup`. The filename format determines title/artist metadata:
 
 ```
 "Artist - Title.mp3"  -->  artist="Artist", title="Title"
@@ -162,6 +162,8 @@ Place MP3 or WAV files in `songs/` and run `npm run setup`. The filename format 
 ```
 
 Songs already in the database are skipped (matched by filename or artist+title).
+
+Album metadata is read from audio tags (`album`) when available and used for "correct album" hinting.
 
 ## Branches
 
