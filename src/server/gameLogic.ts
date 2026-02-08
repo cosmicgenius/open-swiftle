@@ -20,6 +20,11 @@ interface GameSessionData {
   song: SessionSong;
 }
 
+interface FreeplayRoundSelection {
+  song: Song;
+  startTime: number;
+}
+
 export interface GuessResponse extends GuessResult {
   completed: boolean;
   won: boolean;
@@ -80,7 +85,7 @@ export class GameLogic {
   async createGameSession(
     mode: 'daily' | 'freeplay',
     clientId: string,
-    options?: { freeplayHard?: boolean }
+    options?: { freeplayHard?: boolean; freeplayRound?: FreeplayRoundSelection }
   ): Promise<GameSessionData> {
     const sessionId = this.generateSessionId(clientId);
     const freeplayHard = mode === 'freeplay' && options?.freeplayHard === true;
@@ -92,7 +97,14 @@ export class GameLogic {
       song = await this.getDailySong();
       gameDate = this.getTodayString();
     } else {
-      song = await this.getFreeplaySong();
+      if (options?.freeplayRound) {
+        song = {
+          ...options.freeplayRound.song,
+          start_time: options.freeplayRound.startTime,
+        };
+      } else {
+        song = await this.getFreeplaySong();
+      }
     }
 
     const session: GameSessionData = {

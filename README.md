@@ -95,6 +95,11 @@ cloudflared tunnel --url http://localhost:3000
 |---|---|---|
 | `DAILY_SEED_SECRET` | Yes | Secret mixed with date to determine daily song. Change this to make your daily picks unpredictable even with public code. |
 | `PORT` | No | Server port (default: 3000) |
+| `FREEPLAY_CLIP_TTL_MS` | No | TTL for shared freeplay clips on disk and in memory (default: `300000` / 5 min). |
+| `FREEPLAY_POOL_REFRESH_MS` | No | Background refresh interval for adding a new freeplay pool entry (default: `300000` / 5 min). |
+| `FREEPLAY_POOL_MIN_SIZE` | No | Minimum number of prewarmed freeplay entries to keep available (default: `12`). |
+| `FREEPLAY_POOL_MAX_SIZE` | No | Maximum in-memory freeplay pool size before trimming old entries (default: `30`). |
+| `FREEPLAY_AUDIO_MAX_AGE_SECONDS` | No | Browser cache max-age for freeplay audio responses (default: `60`). |
 
 ## Project Structure
 
@@ -106,6 +111,7 @@ open-swiftle/
       database.ts       # SQLite wrapper (songs, sessions, daily picks)
       gameLogic.ts      # Song selection, guess validation, seeded RNG
       clipCache.ts      # Audio clip generation + disk cache
+      freeplayPool.ts   # Shared freeplay clip pool + background refresh
     scripts/
       setup.ts          # Song import CLI
   public/               # Frontend (vanilla HTML/CSS/JS)
@@ -138,9 +144,13 @@ Full song files never leave the server. Instead, clips are generated on demand v
 
 **Daily mode:** Clips are keyed by date. The first player to request a daily clip triggers generation of all 6 durations (1s through 6s). Every subsequent request that day is served from cache.
 
-**Freeplay mode:** Clips are keyed by session ID and only the 6-second clip is generated for that round.
+**Freeplay mode:** Clips use a shared cache key (`freeplay-shared`) and are selected from a shared prewarmed pool of `(song, startTime)` entries. A background timer adds a new pooled clip at a fixed interval (default: every 5 minutes).
 
 FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer is base64-encoded and written to a JSON file in `audio/cache/`. On subsequent requests, the server reads the JSON, decodes the base64, and streams the MP3 bytes.
+
+Freeplay TTL is applied in both places:
+- In-memory pool entries expire after `FREEPLAY_CLIP_TTL_MS`.
+- Disk cache entries for freeplay are treated as stale after the same TTL and regenerated when needed.
 
 **Why base64 JSON and not raw MP3 files?** The cache stores metadata alongside the audio (song ID, start time, generation timestamp). This makes it easy to inspect, debug, and extend without a separate metadata store.
 
@@ -164,7 +174,7 @@ FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer i
 
 1. **Blob preloading.** The frontend fetches audio clips as blobs via `fetch()` and converts them to object URLs (`URL.createObjectURL`). By the time the user presses play, the audio data is already in browser memory. No network round-trip on playback.
 
-2. **Disk cache.** After the first generation, all clip requests for the same key are served from disk. Daily clips are generated once and reused for every player that day.
+2. **Disk cache + shared freeplay pool.** Daily clips are generated once per date and reused all day. Freeplay uses a shared prewarmed pool and shared disk key so all sessions can reuse prepared clips.
 
 3. **FFmpeg pipe streaming.** Clips are extracted via FFmpeg's pipe output, avoiding intermediate temp files and extra disk I/O.
 

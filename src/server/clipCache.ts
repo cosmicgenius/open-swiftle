@@ -20,6 +20,10 @@ export interface CachedClip {
   path: string;
 }
 
+export interface ClipCacheOptions {
+  ttlMs?: number;
+}
+
 export class ClipCache {
   private cacheDir: string;
 
@@ -37,12 +41,13 @@ export class ClipCache {
     }
   }
 
-  // Get or generate clips for a given cache key (date for daily, sessionId for freeplay)
+  // Get or generate clips for a given cache key (for example: date for daily, shared key for freeplay)
   async getClips(
     cacheKey: string,
     song: Song,
     startTime: number,
-    durations: number[]
+    durations: number[],
+    options?: ClipCacheOptions
   ): Promise<CachedClip[]> {
     const keyDir = path.join(this.cacheDir, cacheKey);
     const filePrefix = `${song.id}_${Math.floor(startTime)}`;
@@ -58,7 +63,12 @@ export class ClipCache {
       const clipPath = path.join(keyDir, `${filePrefix}_${duration}s.json`);
       try {
         const raw = await fs.readFile(clipPath, 'utf8');
-        clips.push({ duration, data: JSON.parse(raw), path: clipPath });
+        const parsed = JSON.parse(raw) as ClipData;
+        if (this.isExpired(parsed.generatedAt, options?.ttlMs)) {
+          missing.push(duration);
+          continue;
+        }
+        clips.push({ duration, data: parsed, path: clipPath });
       } catch {
         missing.push(duration);
       }
@@ -82,6 +92,14 @@ export class ClipCache {
     }
 
     return clips.sort((a, b) => a.duration - b.duration);
+  }
+
+  private isExpired(generatedAt: string | undefined, ttlMs: number | undefined): boolean {
+    if (!ttlMs || ttlMs <= 0) return false;
+    if (!generatedAt) return true;
+    const generatedAtMs = Date.parse(generatedAt);
+    if (!Number.isFinite(generatedAtMs)) return true;
+    return Date.now() - generatedAtMs > ttlMs;
   }
 
   private async generateClips(

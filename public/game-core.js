@@ -39,6 +39,8 @@ export class SwiftleGame {
         this.clipDuration = document.getElementById('clip-duration');
         this.guessSearchInput = document.getElementById('guess-search');
         this.guessSuggestions = document.getElementById('guess-suggestions');
+        this.guessInputAnchor = document.getElementById('guess-input-anchor');
+        this.guessInputArea = document.getElementById('guess-input-area');
         this.submitGuessBtn = document.getElementById('submit-guess');
         this.guessesRemaining = document.getElementById('guesses-remaining');
         this.guessCounter = document.getElementById('guess-counter');
@@ -600,6 +602,17 @@ export class SwiftleGame {
     setHistoryVisible(visible) {
         if (!this.dailyGuessTrack) return;
         this.dailyGuessTrack.classList.toggle('hidden', !visible);
+        if (!visible) {
+            this.restoreGuessInputArea();
+        }
+    }
+
+    restoreGuessInputArea() {
+        if (!this.guessInputAnchor || !this.guessInputArea) return;
+        const targetParent = this.guessInputAnchor.parentElement;
+        if (this.guessInputArea.parentElement !== targetParent) {
+            this.guessInputAnchor.insertAdjacentElement('afterend', this.guessInputArea);
+        }
     }
 
     renderFreeplayScore() {
@@ -713,9 +726,13 @@ export class SwiftleGame {
     }
 
     renderDailyGuessTrack() {
-        if (!this.dailyGuessTrack || this.currentMode !== 'daily') return;
+        if (!this.dailyGuessTrack || this.currentMode !== 'daily') {
+            this.restoreGuessInputArea();
+            return;
+        }
 
         this.dailyGuessTrack.innerHTML = '';
+        let mountedCurrentInput = false;
         for (let guessNumber = 1; guessNumber <= 6; guessNumber++) {
             const box = document.createElement('div');
             box.className = 'daily-guess-box';
@@ -733,9 +750,16 @@ export class SwiftleGame {
                 const guessesLeft = Math.max(0, this.maxGuesses - this.currentGuess + 1);
                 box.innerHTML = `
                     <div class="daily-guess-header">Guess ${guessNumber}</div>
-                    <div class="daily-guess-title">Current guess</div>
+                    <div class="daily-guess-title">Now guessing</div>
                     <div class="daily-guess-status">${this.currentGuess}s clip • ${guessesLeft} left</div>
                 `;
+                const inlineInputHost = document.createElement('div');
+                inlineInputHost.className = 'daily-inline-guess-host';
+                box.appendChild(inlineInputHost);
+                if (this.guessInputArea) {
+                    inlineInputHost.appendChild(this.guessInputArea);
+                    mountedCurrentInput = true;
+                }
             } else {
                 box.innerHTML = `
                     <div class="daily-guess-header">Guess ${guessNumber}</div>
@@ -744,6 +768,10 @@ export class SwiftleGame {
             }
 
             this.dailyGuessTrack.appendChild(box);
+        }
+
+        if (!mountedCurrentInput) {
+            this.restoreGuessInputArea();
         }
     }
 }

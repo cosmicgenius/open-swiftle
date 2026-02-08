@@ -8,6 +8,7 @@ dotenv.config();
 import { Database } from './database';
 import { GameLogic } from './gameLogic';
 import { ClipCache } from './clipCache';
+import { FreeplayPool } from './freeplayPool';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,19 @@ const PORT = process.env.PORT || 3000;
 const db = new Database();
 const clipCache = new ClipCache();
 const gameLogic = new GameLogic(db);
+const FREEPLAY_SHARED_CACHE_KEY = 'freeplay-shared';
+const FREEPLAY_CLIP_TTL_MS = Number(process.env.FREEPLAY_CLIP_TTL_MS || 5 * 60 * 1000);
+const FREEPLAY_POOL_REFRESH_MS = Number(process.env.FREEPLAY_POOL_REFRESH_MS || 5 * 60 * 1000);
+const FREEPLAY_POOL_MIN_SIZE = Number(process.env.FREEPLAY_POOL_MIN_SIZE || 12);
+const FREEPLAY_POOL_MAX_SIZE = Number(process.env.FREEPLAY_POOL_MAX_SIZE || 30);
+const FREEPLAY_AUDIO_MAX_AGE_SECONDS = Number(process.env.FREEPLAY_AUDIO_MAX_AGE_SECONDS || 60);
+const freeplayPool = new FreeplayPool(db, clipCache, {
+  cacheKey: FREEPLAY_SHARED_CACHE_KEY,
+  ttlMs: FREEPLAY_CLIP_TTL_MS,
+  refreshMs: FREEPLAY_POOL_REFRESH_MS,
+  minSize: FREEPLAY_POOL_MIN_SIZE,
+  maxSize: FREEPLAY_POOL_MAX_SIZE,
+});
 
 interface RateLimitEntry {
   count: number;
@@ -69,8 +83,13 @@ app.post('/api/game/start', startLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Invalid game mode' });
     }
 
+    const freeplayRound =
+      mode === 'freeplay'
+        ? await freeplayPool.getRound()
+        : undefined;
     const session = await gameLogic.createGameSession(mode, clientId, {
       freeplayHard: Boolean(freeplayHard),
+      freeplayRound,
     });
 
     const maxGuesses = mode === 'daily' ? 6 : session.freeplayHard ? 1 : null;
@@ -124,9 +143,11 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
 
     // Both modes: use start_time stored on the session
     const startTime = session.start_time;
-    const cacheKey = session.mode === 'daily' ? session.date! : session.id;
+    const cacheKey = session.mode === 'daily' ? session.date! : FREEPLAY_SHARED_CACHE_KEY;
     const clipDurations = session.mode === 'daily' ? [1, 2, 3, 4, 5, 6] : [6];
-    const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations);
+    const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations, {
+      ttlMs: session.mode === 'freeplay' ? FREEPLAY_CLIP_TTL_MS : undefined,
+    });
     const clip = clips.find((c) => c.duration === guess);
 
     if (!clip?.data?.audioData) {
@@ -135,10 +156,12 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
 
     const audioBuffer = Buffer.from(clip.data.audioData, 'base64');
 
+    const maxAgeSeconds =
+      session.mode === 'freeplay' ? FREEPLAY_AUDIO_MAX_AGE_SECONDS : 3600;
     res.set({
       'Content-Type': 'audio/mpeg',
       'Content-Length': String(audioBuffer.length),
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': `public, max-age=${maxAgeSeconds}`,
     });
 
     res.send(audioBuffer);
@@ -285,13 +308,18 @@ app.get('/freeplay', (_req, res) => {
 app.listen(PORT, () => {
   console.log(`Swiftle server running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} to play!`);
-
-  // Freeplay clips are generated on-demand per session
+  void freeplayPool.start().catch((error) => {
+    console.error('Failed to start freeplay pool:', error);
+  });
+  console.log(
+    `Freeplay pool active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", ttl=${FREEPLAY_CLIP_TTL_MS}ms, refresh=${FREEPLAY_POOL_REFRESH_MS}ms)`
+  );
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down gracefully...');
+  freeplayPool.stop();
   db.close();
   clipCache.stop();
   process.exit(0);
