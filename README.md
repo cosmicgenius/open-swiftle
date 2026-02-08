@@ -7,8 +7,19 @@ A music guessing game inspired by [Swiftle](https://www.techyonic.co/swiftle) an
 ### Daily Mode
 One song per day, shared across all players. You get 6 guesses, and each wrong guess reveals one more second of audio (1s, 2s, ..., 6s). Same song and starting point for everyone on a given day.
 
+- Route: `/`
+- Auto-starts on page load
+- Shows previous guesses and song/album feedback
+
 ### Freeplay Mode
-A random song plays for 6 seconds. You get one chance to guess. Unlimited rounds.
+A fast reaction loop around a 6-second clip timer.
+
+- Route: `/freeplay`
+- Start screen with mode options, then autoplay
+- **Normal:** unlimited guesses until 6-second timeout
+- **Hard mode:** one wrong guess ends the round
+- Correct guess immediately starts next round
+- Tracks `Score` and persistent `Best` score locally
 
 ## Quick Start (Local)
 
@@ -116,7 +127,7 @@ SQLite was chosen because the data model is simple (songs, sessions, daily picks
 Three tables:
 - **songs** -- metadata imported from filenames + FFmpeg duration probing
 - **daily_songs** -- one row per date, mapping to a song ID and a random start time
-- **game_sessions** -- tracks each player's guesses, mode, and the start time for their clip
+- **game_sessions** -- tracks mode, guesses, `freeplay_hard`, and clip start time
 
 ### Audio Clip Cache
 
@@ -124,7 +135,7 @@ Full song files never leave the server. Instead, clips are generated on demand v
 
 **Daily mode:** Clips are keyed by date. The first player to request a daily clip triggers generation of all 6 durations (1s through 6s). Every subsequent request that day is served from cache.
 
-**Freeplay mode:** Clips are keyed by session ID. Each new freeplay round generates a fresh 6s clip from a random song and start point.
+**Freeplay mode:** Clips are keyed by session ID and only the 6-second clip is generated for that round.
 
 FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer is base64-encoded and written to a JSON file in `audio/cache/`. On subsequent requests, the server reads the JSON, decodes the base64, and streams the MP3 bytes.
 
@@ -144,6 +155,8 @@ FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer i
 
 5. **Catalog-constrained guessing.** The client loads the song catalog and submits `guessSongId` (not free text). The server rejects unknown IDs and validates exact song identity.
 
+6. **Basic abuse controls.** Per-IP in-memory rate limiting is applied to start, audio, guess, status, timeout, and song-list endpoints.
+
 ### Latency Optimization
 
 1. **Blob preloading.** The frontend fetches audio clips as blobs via `fetch()` and converts them to object URLs (`URL.createObjectURL`). By the time the user presses play, the audio data is already in browser memory. No network round-trip on playback.
@@ -154,16 +167,44 @@ FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer i
 
 ## Adding Songs
 
-Place MP3 or WAV files in `songs/` and run `npm run setup`. The filename format determines title/artist metadata:
+Place MP3 or WAV files in `songs/` and run `npm run setup`.
+
+The importer is recursive and supports:
+
+```
+songs/Track.mp3
+songs/Album Name/Track.mp3
+songs/Album Name/Disc 2/Track.mp3
+```
+
+Filename parsing:
 
 ```
 "Artist - Title.mp3"  -->  artist="Artist", title="Title"
 "Title.mp3"           -->  artist="Taylor Swift", title="Title"
 ```
 
-Songs already in the database are skipped (matched by filename or artist+title).
+Album resolution:
 
-Album metadata is read from audio tags (`album`) when available and used for "correct album" hinting.
+```
+top-level folder name in songs/ takes priority (e.g., songs/Red/...)
+otherwise falls back to audio tag `album` if present
+otherwise album is null
+```
+
+Songs already in the database are skipped (matched by filename or by artist+title+album).
+
+## HTTP Routes
+
+- `GET /` -- daily page (auto-start daily game)
+- `GET /freeplay` -- freeplay start page
+- `POST /api/game/start` -- create session (`mode`, `clientId`, optional `freeplayHard`)
+- `GET /api/game/:sessionId/audio/:guessNumber` -- fetch earned clip
+- `POST /api/game/:sessionId/guess` -- submit `guessSongId`
+- `POST /api/game/:sessionId/timeout` -- force timeout loss (freeplay only)
+- `GET /api/game/:sessionId/status` -- session state
+- `GET /api/admin/songs` -- song catalog for client search/select
+- `GET /api/health` -- health check
 
 ## Branches
 

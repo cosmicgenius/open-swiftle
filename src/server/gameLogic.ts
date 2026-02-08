@@ -136,6 +136,7 @@ export class GameLogic {
 
     const isCorrect = guessedSong.id === song.id;
     const albumMatch =
+      session.mode === 'daily' &&
       !isCorrect &&
       this.hasAlbum(guessedSong.album) &&
       this.hasAlbum(song.album) &&
@@ -204,7 +205,7 @@ export class GameLogic {
     }
 
     const guessResult: GuessResult = {
-      guess: '(No guess)',
+      guess: '',
       guessSongId: -1,
       guessAlbum: null,
       matchLevel: 'incorrect',

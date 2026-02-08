@@ -25,7 +25,7 @@
                     Your browser does not support the audio element.
                 </audio>
                 <div class="audio-info">
-                    <span id="clip-duration">0s</span> revealed
+                    <span id="clip-duration">0s revealed</span>
                 </div>
                 <div id="freeplay-progress-wrap" class="freeplay-progress-wrap hidden" aria-hidden="true">
                     <div id="freeplay-progress-bar" class="freeplay-progress-bar"></div>
@@ -34,6 +34,12 @@
 
             <div class="guess-section">
                 <div class="guess-input-area">
+                    <input
+                        type="text"
+                        id="guess-search"
+                        placeholder="Search songs..."
+                        autocomplete="off"
+                    >
                     <select id="guess-select">
                         <option value="">Select a song...</option>
                     </select>
@@ -43,7 +49,7 @@
                     Guesses remaining: <span id="guesses-remaining">6</span>
                 </div>
                 <div id="freeplay-score" class="freeplay-score hidden">
-                    Correct before loss: <span id="freeplay-score-value">0</span>
+                    Score: <span id="freeplay-score-value">0</span> • Best: <span id="freeplay-best-score-value">0</span>
                 </div>
             </div>
 
