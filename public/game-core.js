@@ -76,7 +76,7 @@ export class SwiftleGame {
         }
         this.startGameBtn.addEventListener('click', () => this.startNewGame());
         this.submitGuessBtn.addEventListener('click', () => this.submitGuess());
-        this.playAgainBtn.addEventListener('click', () => this.startNewGame());
+        this.playAgainBtn.addEventListener('click', () => this.handlePlayAgain());
         this.retryBtn.addEventListener('click', () => this.hideError());
         if (this.dailyPlayPauseBtn) {
             this.dailyPlayPauseBtn.addEventListener('click', () => this.toggleDailyPlayback());
@@ -147,7 +147,76 @@ export class SwiftleGame {
         }
 
         this.setMode('daily');
-        this.startNewGame();
+        void this.resumeDailySessionOrStart();
+    }
+
+    async resumeDailySessionOrStart() {
+        const storedSessionId = this.getStoredDailySessionId();
+        if (!storedSessionId) {
+            await this.startNewGame();
+            return;
+        }
+
+        this.showLoading();
+        this.resetGameState();
+
+        try {
+            await this.ensureSongsLoaded();
+            const response = await fetch(`/api/game/${storedSessionId}/status`);
+            if (!response.ok) {
+                throw new Error('Stored daily session is unavailable');
+            }
+
+            const status = await response.json();
+            if (status.mode !== 'daily') {
+                throw new Error('Stored session is not daily');
+            }
+
+            this.sessionId = status.sessionId;
+            this.currentMode = 'daily';
+            this.maxGuesses = status.maxGuesses ?? 6;
+            this.gameCompleted = status.completed === true;
+            this.dailyGuessHistory = this.mapDailyGuessHistory(status.guesses ?? []);
+
+            const totalGuesses = this.dailyGuessHistory.length;
+            this.currentGuess = this.gameCompleted
+                ? Math.min(6, Math.max(1, totalGuesses))
+                : Math.min(6, totalGuesses + 1);
+
+            this.setHistoryVisible(true);
+            this.setDailyAudioVisible(true);
+            this.setClipDurationVisible(true);
+            this.audioPlayer.controls = true;
+            this.audioPlayer.style.display = '';
+            this.freeplayProgressWrap.classList.add('hidden');
+            this.freeplayScoreRow.classList.add('hidden');
+            this.updateClipDurationLabel(this.currentGuess);
+            this.renderDailyGuessTrack();
+            this.renderCounter(status.guessesRemaining);
+            this.guessInputArea?.classList.remove('hidden');
+
+            await this.preloadAudioClip(this.currentGuess);
+            this.showGameArea();
+
+            if (this.gameCompleted) {
+                this.guessSearchInput.disabled = true;
+                this.submitGuessBtn.disabled = true;
+                this.guessInputArea?.classList.add('hidden');
+                const tries = totalGuesses === 1 ? 'try' : 'tries';
+                this.gameResult.classList.remove('hidden');
+                this.gameResult.className = `game-result ${status.won ? 'won' : 'lost'}`;
+                this.resultMessage.innerHTML = status.won
+                    ? `Congratulations!<br>You guessed it in ${totalGuesses} ${tries}!<br>The song was: <strong>"${status.correctAnswer || 'Unknown'}"</strong>`
+                    : `Game Over<br>The song was: <strong>"${status.correctAnswer || 'Unknown'}"</strong><br>Better luck next time!`;
+                this.playAgainBtn.style.display = 'none';
+                return;
+            }
+
+            this.guessSearchInput.focus();
+        } catch {
+            this.clearStoredDailySessionId();
+            await this.startNewGame();
+        }
     }
 
     navigateTo(pathname) {
@@ -199,6 +268,17 @@ export class SwiftleGame {
         this.gameResult.classList.add('hidden');
     }
 
+    handlePlayAgain() {
+        if (this.currentMode === 'freeplay') {
+            this.resetGameState();
+            this.setMode('freeplay');
+            this.configureStartScreenForFreeplay();
+            this.showStartScreen();
+            return;
+        }
+        this.startNewGame();
+    }
+
     async startNewGame(keepFreeplayScore = false) {
         this.showLoading();
         this.resetGameState();
@@ -231,6 +311,9 @@ export class SwiftleGame {
             this.currentMode = data.mode;
             this.freeplayHardMode = data.freeplayHard === true;
             this.maxGuesses = data.maxGuesses;
+            if (data.mode === 'daily') {
+                this.storeDailySessionId(data.sessionId);
+            }
             this.renderCounter();
 
             if (data.mode === 'freeplay') {
@@ -374,6 +457,7 @@ export class SwiftleGame {
         if (result.completed) {
             this.gameCompleted = true;
             this.guessSearchInput.disabled = true;
+            this.guessInputArea?.classList.add('hidden');
             this.clearFreeplayTimers();
 
             if (this.currentMode === 'freeplay' && result.won) {
@@ -407,20 +491,30 @@ export class SwiftleGame {
         if (result.timedOut) return;
         if (this.currentMode !== 'daily') return;
 
-        const feedbackText =
-            result.matchLevel === 'correct_song'
-                ? 'Correct song'
-                : result.matchLevel === 'correct_album'
-                    ? 'Correct album'
-                    : 'Incorrect';
-
         this.dailyGuessHistory.push({
             guessNumber: result.guessNumber,
             guess: result.guess,
             matchLevel: result.matchLevel,
-            feedbackText
+            feedbackText: this.getDailyFeedbackText(result.matchLevel)
         });
         this.renderDailyGuessTrack();
+    }
+
+    mapDailyGuessHistory(guesses) {
+        return guesses.map((guess) => ({
+            guessNumber: guess.guessNumber,
+            guess: guess.guess,
+            matchLevel: guess.matchLevel,
+            feedbackText: this.getDailyFeedbackText(guess.matchLevel)
+        }));
+    }
+
+    getDailyFeedbackText(matchLevel) {
+        return matchLevel === 'correct_song'
+            ? 'Correct song'
+            : matchLevel === 'correct_album'
+                ? 'Correct album'
+                : 'Incorrect';
     }
 
     showGameResult(result) {
@@ -478,6 +572,7 @@ export class SwiftleGame {
         this.activeSuggestionIndex = -1;
         this.guessSearchInput.disabled = false;
         this.submitGuessBtn.disabled = true;
+        this.guessInputArea?.classList.remove('hidden');
         this.audioPlayer.src = '';
         this.audioPlayer.style.display = '';
         this.audioPlayer.controls = true;
@@ -506,6 +601,26 @@ export class SwiftleGame {
             localStorage.setItem('swiftle_client_id', clientId);
         }
         return clientId;
+    }
+
+    getTodayUtcDateString() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    getDailySessionStorageKey() {
+        return `swiftle_daily_session_${this.getTodayUtcDateString()}`;
+    }
+
+    getStoredDailySessionId() {
+        return localStorage.getItem(this.getDailySessionStorageKey());
+    }
+
+    storeDailySessionId(sessionId) {
+        localStorage.setItem(this.getDailySessionStorageKey(), sessionId);
+    }
+
+    clearStoredDailySessionId() {
+        localStorage.removeItem(this.getDailySessionStorageKey());
     }
 
     async checkGameAvailability() {
