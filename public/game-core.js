@@ -39,7 +39,6 @@ export class SwiftleGame {
         this.audioPlayer = document.getElementById('audio-player');
         this.dailyAudioShell = document.getElementById('daily-audio-shell');
         this.dailyPlayPauseBtn = document.getElementById('daily-play-pause');
-        this.dailyReplayBtn = document.getElementById('daily-replay');
         this.dailyAudioTime = document.getElementById('daily-audio-time');
         this.dailyAudioProgress = document.getElementById('daily-audio-progress');
         this.dailyAudioProgressFill = document.getElementById('daily-audio-progress-fill');
@@ -80,9 +79,6 @@ export class SwiftleGame {
         this.retryBtn.addEventListener('click', () => this.hideError());
         if (this.dailyPlayPauseBtn) {
             this.dailyPlayPauseBtn.addEventListener('click', () => this.toggleDailyPlayback());
-        }
-        if (this.dailyReplayBtn) {
-            this.dailyReplayBtn.addEventListener('click', () => this.replayDailyClip());
         }
         if (this.dailyAudioProgress) {
             this.dailyAudioProgress.addEventListener('click', (event) => this.seekDailyClip(event));
@@ -668,7 +664,7 @@ export class SwiftleGame {
         if (heading) heading.textContent = 'Freeplay';
         if (description) {
             description.textContent =
-                'Click start to hear a 6-second clip immediately. Guess as many as you can before time runs out.';
+                'Click start to hear a 6-second clip. If you get it before it ends, a new clip begins immediately. Guess as many as you can.';
         }
         this.freeplayOptions.classList.remove('hidden');
         this.startGameBtn.textContent = 'Start Freeplay';
@@ -724,12 +720,6 @@ export class SwiftleGame {
         } else {
             this.audioPlayer.pause();
         }
-    }
-
-    replayDailyClip() {
-        if (!this.audioPlayer || this.currentMode !== 'daily') return;
-        this.audioPlayer.currentTime = 0;
-        this.audioPlayer.play().catch(() => {});
     }
 
     seekDailyClip(event) {

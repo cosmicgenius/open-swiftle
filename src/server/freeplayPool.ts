@@ -40,6 +40,9 @@ export class FreeplayPool {
     this.started = true;
 
     await this.fillToMinSize();
+    console.log(
+      `Freeplay pool started: size=${this.entries.length}, refreshMs=${this.options.refreshMs}, ttlMs=${this.options.ttlMs}`
+    );
 
     this.timer = setInterval(() => {
       void this.refreshTick();
@@ -74,6 +77,7 @@ export class FreeplayPool {
 
   private async refreshTick(): Promise<void> {
     try {
+      const before = this.entries.length;
       this.pruneExpired();
       await this.addEntry();
       await this.fillToMinSize();
@@ -81,6 +85,10 @@ export class FreeplayPool {
       if (this.entries.length > this.options.maxSize) {
         this.entries = this.entries.slice(this.entries.length - this.options.maxSize);
       }
+
+      console.log(
+        `Freeplay pool refresh tick: sizeBefore=${before}, sizeAfter=${this.entries.length}`
+      );
     } catch (error) {
       console.error('Failed to refresh freeplay pool:', error);
     }
@@ -126,10 +134,12 @@ export class FreeplayPool {
 
     if (existingIdx >= 0) {
       this.entries[existingIdx] = newEntry;
+      console.log(`Freeplay pool refreshed entry: key=${key}`);
       return;
     }
 
     this.entries.push(newEntry);
+    console.log(`Freeplay pool added entry: key=${key}, size=${this.entries.length}`);
   }
 
   private pickRandomSongAndStart(songs: Song[]): { song: Song; startTime: number } {

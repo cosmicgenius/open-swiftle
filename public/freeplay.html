@@ -27,7 +27,6 @@
                 <div id="daily-audio-shell" class="daily-audio-shell">
                     <div class="daily-audio-top">
                         <button id="daily-play-pause" class="daily-audio-btn" type="button">PLAY</button>
-                        <button id="daily-replay" class="daily-audio-btn secondary" type="button">RESTART</button>
                         <div id="daily-audio-time" class="daily-audio-time">0:00 / 0:00</div>
                     </div>
                     <button id="daily-audio-progress" class="daily-audio-progress" type="button" aria-label="Seek audio">
@@ -74,12 +73,6 @@
             <div class="welcome-message">
                 <h2>Welcome to Open Swiftle!</h2>
                 <p>Listen to clips of Taylor Swift songs and try to guess the title.</p>
-                <ul>
-                    <li>6 guesses to get it right</li>
-                    <li>Each wrong guess reveals more of the song</li>
-                    <li>New daily song every day</li>
-                    <li>Unlimited freeplay mode available</li>
-                </ul>
                 <div id="freeplay-options" class="freeplay-options hidden">
                     <label>
                         <input id="freeplay-hard-mode" type="checkbox">
@@ -102,7 +95,8 @@
     </div>
 
     <footer>
-        <p>Open source Taylor Swift guessing game • Not affiliated with Taylor Swift</p>
+        <p class="disclaimer">Open source Taylor Swift guessing game • Not affiliated with Taylor Swift</p>
+        <p class="disclaimer">These clips are used soley for non profit entertainment purposes only and any further usage is not intended. All the content is copyright to the respective owner and is protected under copyright laws.</p>
     </footer>
 
     <script type="module" src="freeplay.js"></script>

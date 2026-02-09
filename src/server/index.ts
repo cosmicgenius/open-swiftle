@@ -13,6 +13,15 @@ import { FreeplayPool } from './freeplayPool';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+function installTimestampedConsoleLog(): void {
+  const originalLog = console.log.bind(console);
+  console.log = (...args: unknown[]) => {
+    originalLog(`[${new Date().toISOString()}]`, ...args);
+  };
+}
+
+installTimestampedConsoleLog();
+
 const db = new Database();
 const clipCache = new ClipCache();
 const gameLogic = new GameLogic(db);

@@ -9,6 +9,7 @@ One song per day, shared across all players. You get 6 guesses, and each wrong g
 
 - Route: `/`
 - Auto-starts on page load
+- Resumes the current daily session after reload (stored in browser `localStorage`, keyed by UTC date)
 - Shows previous guesses and song/album feedback
 
 ### Freeplay Mode
@@ -177,6 +178,12 @@ Freeplay TTL is applied in both places:
 2. **Disk cache + shared freeplay pool.** Daily clips are generated once per date and reused all day. Freeplay uses a shared prewarmed pool and shared disk key so all sessions can reuse prepared clips.
 
 3. **FFmpeg pipe streaming.** Clips are extracted via FFmpeg's pipe output, avoiding intermediate temp files and extra disk I/O.
+
+### Frontend State Persistence
+
+- **Daily session resume:** The frontend stores the active daily `sessionId` in `localStorage` using a UTC-date-scoped key (`swiftle_daily_session_YYYY-MM-DD`).
+- On reload, it calls `GET /api/game/:sessionId/status` and rebuilds guess history/current clip from server state.
+- If the stored session is missing/invalid, the client clears the key and starts a new daily session.
 
 ## Adding Songs
 

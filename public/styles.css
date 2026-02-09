@@ -25,9 +25,13 @@ body {
     background: linear-gradient(180deg, #090a0c, #07080a);
     min-height: 100vh;
     color: var(--text);
+    display: flex;
+    flex-direction: column;
 }
 
 .container {
+    width: 100%;
+    flex: 1;
     max-width: 680px;
     margin: 0 auto;
     padding: 20px;
@@ -169,12 +173,6 @@ header p {
     min-width: 78px;
     cursor: pointer;
     font-size: 13px;
-}
-
-.daily-audio-btn.secondary {
-    border-color: var(--line);
-    color: var(--text-dim);
-    background: rgba(36, 64, 47, 0.22);
 }
 
 .daily-audio-time {
@@ -549,7 +547,8 @@ header p {
 
 footer {
     text-align: center;
-    margin-top: 26px;
+    margin-top: auto;
+    padding: 0 20px 18px;
     color: #8491a0;
     font-size: 13px;
 }
@@ -597,4 +596,8 @@ footer {
     .daily-audio-time {
         margin-left: 0;
     }
+}
+
+.disclaimer {
+    padding-bottom: 8px;
 }
