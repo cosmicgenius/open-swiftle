@@ -44,6 +44,7 @@ export class SwiftleGame {
         this.dailyAudioProgress = document.getElementById('daily-audio-progress');
         this.dailyAudioProgressFill = document.getElementById('daily-audio-progress-fill');
         this.clipDuration = document.getElementById('clip-duration');
+        this.audioInfo = this.clipDuration?.parentElement || null;
         this.guessSearchInput = document.getElementById('guess-search');
         this.guessSuggestions = document.getElementById('guess-suggestions');
         this.guessInputAnchor = document.getElementById('guess-input-anchor');
@@ -235,15 +236,17 @@ export class SwiftleGame {
             if (data.mode === 'freeplay') {
                 this.setHistoryVisible(false);
                 this.setDailyAudioVisible(false);
+                this.setClipDurationVisible(true);
                 await this.startFreeplayRound();
             } else {
                 this.setHistoryVisible(true);
                 this.setDailyAudioVisible(true);
+                this.setClipDurationVisible(true);
                 this.audioPlayer.controls = true;
                 this.audioPlayer.style.display = '';
                 this.freeplayProgressWrap.classList.add('hidden');
                 this.freeplayScoreRow.classList.add('hidden');
-                this.clipDuration.textContent = '';
+                this.updateClipDurationLabel(this.currentGuess);
                 this.renderDailyGuessTrack();
                 await this.preloadAudioClip(this.currentGuess);
                 this.showGameArea();
@@ -301,7 +304,7 @@ export class SwiftleGame {
             this.renderFreeplayScore();
             this.guessSearchInput.disabled = false;
             this.guessSearchInput.focus();
-            this.clipDuration.textContent = '';
+            this.updateClipDurationLabel(6);
             this.startFreeplayCountdown(roundToken);
 
             // Auto-play the 6s clip
@@ -390,7 +393,7 @@ export class SwiftleGame {
         } else {
             if (this.currentMode === 'daily') {
                 this.currentGuess++;
-                this.clipDuration.textContent = '';
+                this.updateClipDurationLabel(this.currentGuess);
                 this.renderDailyGuessTrack();
                 this.preloadAudioClip(this.currentGuess);
             }
@@ -733,6 +736,17 @@ export class SwiftleGame {
         this.freeplayBestScoreValue.textContent = String(this.freeplayBestScore);
     }
 
+    updateClipDurationLabel(revealedSeconds) {
+        if (!this.clipDuration) return;
+        const seconds = Math.max(1, Math.min(6, Number(revealedSeconds) || 1));
+        this.clipDuration.textContent = `${seconds}s revealed`;
+    }
+
+    setClipDurationVisible(visible) {
+        if (!this.audioInfo) return;
+        this.audioInfo.classList.toggle('hidden', !visible);
+    }
+
     getFreeplayHardMode() {
         return this.freeplayHardModeInput?.checked === true;
     }
@@ -863,7 +877,7 @@ export class SwiftleGame {
                 const guessesLeft = Math.max(0, this.maxGuesses - this.currentGuess + 1);
                 box.innerHTML = `
                     <div class="daily-guess-header">Guess ${guessNumber}</div>
-                    <div class="daily-guess-title">Now guessing</div>
+                    <div class="daily-guess-title"></div>
                     <div class="daily-guess-status">${this.currentGuess}s clip • ${guessesLeft} left</div>
                 `;
                 const inlineInputHost = document.createElement('div');
@@ -876,7 +890,7 @@ export class SwiftleGame {
             } else {
                 box.innerHTML = `
                     <div class="daily-guess-header">Guess ${guessNumber}</div>
-                    <div class="daily-guess-title">Empty</div>
+                    <div class="daily-guess-title"></div>
                 `;
             }
 

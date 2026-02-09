@@ -224,4 +224,4 @@ Songs already in the database are skipped (matched by filename or by artist+titl
 | Branch | Description |
 |---|---|
 | `main` | Audio file implementation (current) |
-| `spotify-integration` | Spotify OAuth + Web Playback SDK (WIP, no FFmpeg needed) |
+| `spotify-integration` | Spotify OAuth + Web Playback SDK (WIP, no FFmpeg needed). This is broken right now because creation of new spotify apps is off. |

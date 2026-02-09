@@ -218,7 +218,6 @@ header p {
 .freeplay-progress-wrap {
     margin: 10px auto 0;
     width: 100%;
-    max-width: 500px;
     height: 10px;
     background: #0b0d11;
     border: 1px solid var(--line);
@@ -327,7 +326,7 @@ header p {
 }
 
 .freeplay-score {
-    margin-top: 8px;
+    margin-bottom: 16px;
     text-align: center;
     font-size: 14px;
     color: var(--accent-2);
