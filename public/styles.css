@@ -474,6 +474,25 @@ header p {
     color: var(--text-dim);
 }
 
+.answer-loading {
+    display: inline-block;
+    filter: blur(3px);
+    opacity: 0.9;
+    animation: answerPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes answerPulse {
+    0% {
+        opacity: 0.5;
+    }
+    50% {
+        opacity: 0.95;
+    }
+    100% {
+        opacity: 0.5;
+    }
+}
+
 .game-result.won {
     background: rgba(83, 245, 159, 0.12);
     color: var(--ok);

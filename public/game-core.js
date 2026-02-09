@@ -421,6 +421,10 @@ export class SwiftleGame {
         this.guessSearchInput.disabled = true;
         this.hideSuggestions();
 
+        if (this.currentMode === 'freeplay' && this.freeplayHardMode) {
+            this.showPendingFreeplayResult(false);
+        }
+
         try {
             const response = await fetch(`/api/game/${this.sessionId}/guess`, {
                 method: 'POST',
@@ -801,6 +805,7 @@ export class SwiftleGame {
         try {
             this.submitGuessBtn.disabled = true;
             this.guessSearchInput.disabled = true;
+            this.showPendingFreeplayResult(true);
 
             const response = await fetch(`/api/game/${this.sessionId}/timeout`, {
                 method: 'POST',
@@ -816,8 +821,19 @@ export class SwiftleGame {
             this.handleGuessResult(result);
         } catch (error) {
             console.error('Freeplay timeout error:', error);
+            this.gameResult.classList.add('hidden');
             this.showError(error.message || 'Failed to process timeout');
         }
+    }
+
+    showPendingFreeplayResult(timedOut) {
+        if (this.currentMode !== 'freeplay') return;
+        this.gameResult.classList.remove('hidden');
+        this.gameResult.className = 'game-result lost';
+        this.resultMessage.innerHTML = timedOut
+            ? `Time's Up<br>The song was: <span class="answer-loading">revealing...</span><br>Score: <strong>${this.freeplayScore}</strong> • Best: <strong>${this.freeplayBestScore}</strong>`
+            : `Checking guess...<br>The song was: <span class="answer-loading">revealing...</span>`;
+        this.playAgainBtn.style.display = 'none';
     }
 
     renderCounter(guessesRemainingOverride) {
