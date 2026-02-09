@@ -1,8 +1,8 @@
 node_modules/
 dist/
 audio/
-songs/**/*.mp3
-songs/**/*.wav
+songs/
+test_songs/
 .env
 *.log
 *.db
