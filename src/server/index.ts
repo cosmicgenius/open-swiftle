@@ -31,6 +31,7 @@ const FREEPLAY_POOL_REFRESH_MS = Number(process.env.FREEPLAY_POOL_REFRESH_MS || 
 const FREEPLAY_POOL_MIN_SIZE = Number(process.env.FREEPLAY_POOL_MIN_SIZE || 12);
 const FREEPLAY_POOL_MAX_SIZE = Number(process.env.FREEPLAY_POOL_MAX_SIZE || 30);
 const FREEPLAY_AUDIO_MAX_AGE_SECONDS = Number(process.env.FREEPLAY_AUDIO_MAX_AGE_SECONDS || 60);
+const PUBLIC_SHARE_URL = process.env.PUBLIC_SHARE_URL || 'https://open-swiftle.example';
 const freeplayPool = new FreeplayPool(db, clipCache, {
   cacheKey: FREEPLAY_SHARED_CACHE_KEY,
   ttlMs: FREEPLAY_CLIP_TTL_MS,
@@ -302,6 +303,13 @@ app.get('/api/admin/songs', songsLimiter, async (_req, res) => {
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Client config
+app.get('/api/config', (_req, res) => {
+  res.json({
+    shareUrl: PUBLIC_SHARE_URL,
+  });
 });
 
 // Serve frontend routes

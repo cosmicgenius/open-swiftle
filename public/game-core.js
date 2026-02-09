@@ -22,6 +22,7 @@ export class SwiftleGame {
         this.freeplayHardMode = false;
         this.freeplayScore = 0;
         this.freeplayBestScore = Number(localStorage.getItem('swiftle_freeplay_best_score') || 0);
+        this.shareUrl = window.location.origin;
 
         this.initializeElements();
         this.bindEvents();
@@ -52,6 +53,9 @@ export class SwiftleGame {
         this.guessesRemaining = document.getElementById('guesses-remaining');
         this.guessCounter = document.getElementById('guess-counter');
         this.dailyGuessTrack = document.getElementById('daily-guess-track');
+        this.dailyShareWrap = document.getElementById('daily-share-wrap');
+        this.dailyShareBtn = document.getElementById('share-daily');
+        this.dailyShareStatus = document.getElementById('daily-share-status');
         this.gameResult = document.getElementById('game-result');
         this.resultMessage = document.getElementById('result-message');
         this.playAgainBtn = document.getElementById('play-again');
@@ -77,6 +81,9 @@ export class SwiftleGame {
         this.submitGuessBtn.addEventListener('click', () => this.submitGuess());
         this.playAgainBtn.addEventListener('click', () => this.handlePlayAgain());
         this.retryBtn.addEventListener('click', () => this.hideError());
+        if (this.dailyShareBtn) {
+            this.dailyShareBtn.addEventListener('click', () => this.shareDailyResult());
+        }
         if (this.dailyPlayPauseBtn) {
             this.dailyPlayPauseBtn.addEventListener('click', () => this.toggleDailyPlayback());
         }
@@ -135,6 +142,7 @@ export class SwiftleGame {
     }
 
     bootstrapForPage() {
+        void this.loadClientConfig();
         if (this.initialMode === 'freeplay') {
             this.setMode('freeplay');
             this.configureStartScreenForFreeplay();
@@ -171,7 +179,7 @@ export class SwiftleGame {
             this.sessionId = status.sessionId;
             this.currentMode = 'daily';
             this.maxGuesses = status.maxGuesses ?? 6;
-            this.gameCompleted = status.completed === true;
+            this.gameCompleted = Boolean(status.completed);
             this.dailyGuessHistory = this.mapDailyGuessHistory(status.guesses ?? []);
 
             const totalGuesses = this.dailyGuessHistory.length;
@@ -193,6 +201,7 @@ export class SwiftleGame {
 
             await this.preloadAudioClip(this.currentGuess);
             this.showGameArea();
+            this.refreshDailyShareVisibility();
 
             if (this.gameCompleted) {
                 this.guessSearchInput.disabled = true;
@@ -200,8 +209,8 @@ export class SwiftleGame {
                 this.guessInputArea?.classList.add('hidden');
                 const tries = totalGuesses === 1 ? 'try' : 'tries';
                 this.gameResult.classList.remove('hidden');
-                this.gameResult.className = `game-result ${status.won ? 'won' : 'lost'}`;
-                this.resultMessage.innerHTML = status.won
+                this.gameResult.className = `game-result ${Boolean(status.won) ? 'won' : 'lost'}`;
+                this.resultMessage.innerHTML = Boolean(status.won)
                     ? `Congratulations!<br>You guessed it in ${totalGuesses} ${tries}!<br>The song was: <strong>"${status.correctAnswer || 'Unknown'}"</strong>`
                     : `Game Over<br>The song was: <strong>"${status.correctAnswer || 'Unknown'}"</strong><br>Better luck next time!`;
                 this.playAgainBtn.style.display = 'none';
@@ -209,6 +218,7 @@ export class SwiftleGame {
             }
 
             this.guessSearchInput.focus();
+            this.refreshDailyShareVisibility();
         } catch {
             this.clearStoredDailySessionId();
             await this.startNewGame();
@@ -331,6 +341,7 @@ export class SwiftleGame {
                 this.showGameArea();
                 this.guessSearchInput.focus();
             }
+            this.refreshDailyShareVisibility();
         } catch (error) {
             console.error('Error starting game:', error);
             this.showError(error.message);
@@ -481,6 +492,7 @@ export class SwiftleGame {
         }
 
         this.submitGuessBtn.disabled = this.gameCompleted;
+        this.refreshDailyShareVisibility();
     }
 
     addGuessToTrack(result) {
@@ -582,6 +594,7 @@ export class SwiftleGame {
         this.hideSuggestions();
         this.gameArea.classList.remove('freeplay-flash-win', 'freeplay-flash-loss');
         this.renderDailyGuessTrack();
+        this.refreshDailyShareVisibility();
 
         if (this.songsLoaded) {
             this.renderSongSuggestions('');
@@ -625,6 +638,19 @@ export class SwiftleGame {
             return response.ok;
         } catch {
             return false;
+        }
+    }
+
+    async loadClientConfig() {
+        try {
+            const response = await fetch('/api/config');
+            if (!response.ok) return;
+            const config = await response.json();
+            if (typeof config.shareUrl === 'string' && config.shareUrl.trim().length > 0) {
+                this.shareUrl = config.shareUrl.trim();
+            }
+        } catch {
+            // Keep default share URL.
         }
     }
 
@@ -825,6 +851,82 @@ export class SwiftleGame {
         this.dailyGuessTrack.classList.toggle('hidden', !visible);
         if (!visible) {
             this.restoreGuessInputArea();
+        }
+        this.refreshDailyShareVisibility();
+    }
+
+    refreshDailyShareVisibility() {
+        if (!this.dailyShareWrap) return;
+        const modeSupportsShare = this.currentMode === 'daily' || this.currentMode === 'freeplay';
+        const visible = modeSupportsShare && this.gameCompleted === true;
+        this.dailyShareWrap.classList.toggle('hidden', !visible);
+    }
+
+    getShareSymbol(matchLevel) {
+        if (matchLevel === 'correct_song') return '🟩';
+        if (matchLevel === 'correct_album') return '🟨';
+        return '🟥';
+    }
+
+    buildDailyShareText() {
+        if (this.currentMode === 'freeplay') {
+            return `Open Swiftle Freeplay\n\nScore: ${this.freeplayScore}\n\n${this.shareUrl}`;
+        }
+
+        const results = Array(6).fill('⬜');
+        this.dailyGuessHistory.forEach((entry) => {
+            const index = Number(entry.guessNumber) - 1;
+            if (index < 0 || index >= 6) return;
+            results[index] = this.getShareSymbol(entry.matchLevel);
+        });
+
+        const dayLabel = this.getTodayUtcDateString();
+        const row = `🔊${results.join('')}`;
+        return `Open Swiftle #${dayLabel}\n\n${row}\n\n${this.shareUrl}`;
+    }
+
+    async copyTextToClipboard(text) {
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (copied) return true;
+
+        window.prompt('Copy your result:', text);
+        return false;
+    }
+
+    async shareDailyResult() {
+        if (this.currentMode !== 'daily' && this.currentMode !== 'freeplay') return;
+        const shareText = this.buildDailyShareText();
+
+        try {
+            const copied = await this.copyTextToClipboard(shareText);
+            if (this.dailyShareStatus) {
+                this.dailyShareStatus.textContent = copied ? 'Copied.' : 'Press Ctrl/Cmd+C.';
+            }
+        } catch {
+            if (this.dailyShareStatus) this.dailyShareStatus.textContent = 'Copy failed.';
+        }
+
+        if (this.dailyShareStatus) {
+            setTimeout(() => {
+                if (this.dailyShareStatus) this.dailyShareStatus.textContent = '';
+            }, 1800);
         }
     }
 

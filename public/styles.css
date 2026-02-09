@@ -421,11 +421,57 @@ header p {
 }
 
 .game-result {
+    position: relative;
     text-align: center;
     padding: 18px;
     border-radius: 8px;
     margin-top: 18px;
     border: 1px solid var(--line);
+}
+
+.result-share {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.result-share-text {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.result-share-icon {
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    transform: translateY(-1px);
+}
+
+.result-share-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    fill: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.result-share-icon:hover {
+    color: #9fdfff;
+}
+
+.result-share-status {
+    font-size: 11px;
+    color: var(--text-dim);
 }
 
 .game-result.won {
