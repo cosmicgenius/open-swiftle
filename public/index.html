@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>🎵 Open Swiftle 🎵</h1>
+            <h1>OPEN SWIFTLE</h1>
             <p>Guess the Taylor Swift song in 6 tries!</p>
         </header>
 
@@ -24,6 +24,16 @@
                     <source src="" type="audio/mpeg">
                     Your browser does not support the audio element.
                 </audio>
+                <div id="daily-audio-shell" class="daily-audio-shell">
+                    <div class="daily-audio-top">
+                        <button id="daily-play-pause" class="daily-audio-btn" type="button">PLAY</button>
+                        <button id="daily-replay" class="daily-audio-btn secondary" type="button">RESTART</button>
+                        <div id="daily-audio-time" class="daily-audio-time">0:00 / 0:00</div>
+                    </div>
+                    <button id="daily-audio-progress" class="daily-audio-progress" type="button" aria-label="Seek audio">
+                        <div id="daily-audio-progress-fill" class="daily-audio-progress-fill"></div>
+                    </button>
+                </div>
                 <div class="audio-info">
                     <span id="clip-duration">0s revealed</span>
                 </div>
@@ -69,10 +79,10 @@
                 <h2>Welcome to Open Swiftle!</h2>
                 <p>Listen to clips of Taylor Swift songs and try to guess the title.</p>
                 <ul>
-                    <li>🎵 6 guesses to get it right</li>
-                    <li>⏱️ Each wrong guess reveals more of the song</li>
-                    <li>🗓️ New daily song every day</li>
-                    <li>🎮 Unlimited freeplay mode available</li>
+                    <li>6 guesses to get it right</li>
+                    <li>Each wrong guess reveals more of the song</li>
+                    <li>New daily song every day</li>
+                    <li>Unlimited freeplay mode available</li>
                 </ul>
                 <div id="freeplay-options" class="freeplay-options hidden">
                     <label>

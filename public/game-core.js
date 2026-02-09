@@ -18,6 +18,7 @@ export class SwiftleGame {
         this.freeplayTimeoutId = null;
         this.freeplayIntervalId = null;
         this.freeplayRoundToken = 0;
+        this.freeplayFeedbackTimeoutId = null;
         this.freeplayHardMode = false;
         this.freeplayScore = 0;
         this.freeplayBestScore = Number(localStorage.getItem('swiftle_freeplay_best_score') || 0);
@@ -36,6 +37,12 @@ export class SwiftleGame {
         this.errorMessage = document.getElementById('error-message');
         this.startGameBtn = document.getElementById('start-game');
         this.audioPlayer = document.getElementById('audio-player');
+        this.dailyAudioShell = document.getElementById('daily-audio-shell');
+        this.dailyPlayPauseBtn = document.getElementById('daily-play-pause');
+        this.dailyReplayBtn = document.getElementById('daily-replay');
+        this.dailyAudioTime = document.getElementById('daily-audio-time');
+        this.dailyAudioProgress = document.getElementById('daily-audio-progress');
+        this.dailyAudioProgressFill = document.getElementById('daily-audio-progress-fill');
         this.clipDuration = document.getElementById('clip-duration');
         this.guessSearchInput = document.getElementById('guess-search');
         this.guessSuggestions = document.getElementById('guess-suggestions');
@@ -70,6 +77,22 @@ export class SwiftleGame {
         this.submitGuessBtn.addEventListener('click', () => this.submitGuess());
         this.playAgainBtn.addEventListener('click', () => this.startNewGame());
         this.retryBtn.addEventListener('click', () => this.hideError());
+        if (this.dailyPlayPauseBtn) {
+            this.dailyPlayPauseBtn.addEventListener('click', () => this.toggleDailyPlayback());
+        }
+        if (this.dailyReplayBtn) {
+            this.dailyReplayBtn.addEventListener('click', () => this.replayDailyClip());
+        }
+        if (this.dailyAudioProgress) {
+            this.dailyAudioProgress.addEventListener('click', (event) => this.seekDailyClip(event));
+        }
+        if (this.audioPlayer) {
+            this.audioPlayer.addEventListener('timeupdate', () => this.updateDailyAudioUI());
+            this.audioPlayer.addEventListener('loadedmetadata', () => this.updateDailyAudioUI());
+            this.audioPlayer.addEventListener('play', () => this.updateDailyAudioUI());
+            this.audioPlayer.addEventListener('pause', () => this.updateDailyAudioUI());
+            this.audioPlayer.addEventListener('ended', () => this.updateDailyAudioUI());
+        }
 
         this.guessSearchInput.addEventListener('input', () => {
             this.renderSongSuggestions(this.guessSearchInput.value);
@@ -211,9 +234,11 @@ export class SwiftleGame {
 
             if (data.mode === 'freeplay') {
                 this.setHistoryVisible(false);
+                this.setDailyAudioVisible(false);
                 await this.startFreeplayRound();
             } else {
                 this.setHistoryVisible(true);
+                this.setDailyAudioVisible(true);
                 this.audioPlayer.controls = true;
                 this.audioPlayer.style.display = '';
                 this.freeplayProgressWrap.classList.add('hidden');
@@ -250,6 +275,7 @@ export class SwiftleGame {
 
             this.preloadedAudioUrl = URL.createObjectURL(blob);
             this.audioPlayer.src = this.preloadedAudioUrl;
+            this.updateDailyAudioUI();
         } catch (error) {
             console.error('Error preloading audio:', error);
             this.showError('Failed to load audio clip');
@@ -266,6 +292,7 @@ export class SwiftleGame {
         try {
             await this.preloadAudioClip(6);
             this.showGameArea();
+            this.setDailyAudioVisible(false);
             this.audioPlayer.controls = false;
             this.audioPlayer.style.display = 'none';
             this.freeplayProgressWrap.classList.remove('hidden');
@@ -324,6 +351,14 @@ export class SwiftleGame {
     }
 
     handleGuessResult(result) {
+        if (this.currentMode === 'freeplay') {
+            if (result.timedOut) {
+                this.flashFreeplayFeedback(false);
+            } else {
+                this.flashFreeplayFeedback(result.correct === true);
+            }
+        }
+
         this.addGuessToTrack(result);
         this.renderCounter(result.guessesRemaining);
         this.guessSearchInput.value = '';
@@ -347,7 +382,7 @@ export class SwiftleGame {
                 this.renderFreeplayScore();
                 setTimeout(() => {
                     if (this.currentMode === 'freeplay') this.startNewGame(true);
-                }, 250);
+                }, 500);
                 return;
             }
 
@@ -423,6 +458,10 @@ export class SwiftleGame {
         this.guesses = [];
         this.dailyGuessHistory = [];
         this.clearFreeplayTimers();
+        if (this.freeplayFeedbackTimeoutId) {
+            clearTimeout(this.freeplayFeedbackTimeoutId);
+            this.freeplayFeedbackTimeoutId = null;
+        }
 
         if (this.preloadedAudioUrl) {
             URL.revokeObjectURL(this.preloadedAudioUrl);
@@ -440,12 +479,14 @@ export class SwiftleGame {
         this.audioPlayer.style.display = '';
         this.audioPlayer.controls = true;
         this.audioPlayer.onended = null;
+        this.updateDailyAudioUI();
         this.freeplayProgressWrap.classList.add('hidden');
         this.setFreeplayProgress(100);
         this.freeplayScoreRow.classList.add('hidden');
         this.freeplayOptions.classList.add('hidden');
         this.playAgainBtn.style.display = '';
         this.hideSuggestions();
+        this.gameArea.classList.remove('freeplay-flash-win', 'freeplay-flash-loss');
         this.renderDailyGuessTrack();
 
         if (this.songsLoaded) {
@@ -535,6 +576,78 @@ export class SwiftleGame {
 
     setFreeplayProgress(percent) {
         this.freeplayProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+
+    flashFreeplayFeedback(isSuccess) {
+        if (!this.gameArea) return;
+        if (this.freeplayFeedbackTimeoutId) {
+            clearTimeout(this.freeplayFeedbackTimeoutId);
+            this.freeplayFeedbackTimeoutId = null;
+        }
+
+        this.gameArea.classList.remove('freeplay-flash-win', 'freeplay-flash-loss');
+        this.gameArea.classList.add(isSuccess ? 'freeplay-flash-win' : 'freeplay-flash-loss');
+
+        this.freeplayFeedbackTimeoutId = setTimeout(() => {
+            this.gameArea.classList.remove('freeplay-flash-win', 'freeplay-flash-loss');
+            this.freeplayFeedbackTimeoutId = null;
+        }, 500);
+    }
+
+    setDailyAudioVisible(visible) {
+        if (!this.dailyAudioShell) return;
+        this.dailyAudioShell.classList.toggle('hidden', !visible);
+    }
+
+    toggleDailyPlayback() {
+        if (!this.audioPlayer || this.currentMode !== 'daily') return;
+        if (this.audioPlayer.paused) {
+            this.audioPlayer.play().catch(() => {});
+        } else {
+            this.audioPlayer.pause();
+        }
+    }
+
+    replayDailyClip() {
+        if (!this.audioPlayer || this.currentMode !== 'daily') return;
+        this.audioPlayer.currentTime = 0;
+        this.audioPlayer.play().catch(() => {});
+    }
+
+    seekDailyClip(event) {
+        if (!this.audioPlayer || this.currentMode !== 'daily' || !this.dailyAudioProgress) return;
+        const duration = Number.isFinite(this.audioPlayer.duration) ? this.audioPlayer.duration : 0;
+        if (duration <= 0) return;
+
+        const rect = this.dailyAudioProgress.getBoundingClientRect();
+        const ratio = (event.clientX - rect.left) / rect.width;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        this.audioPlayer.currentTime = duration * clamped;
+        this.updateDailyAudioUI();
+    }
+
+    updateDailyAudioUI() {
+        if (!this.audioPlayer) return;
+        const duration = Number.isFinite(this.audioPlayer.duration) ? this.audioPlayer.duration : 0;
+        const current = Number.isFinite(this.audioPlayer.currentTime) ? this.audioPlayer.currentTime : 0;
+        const progressPct = duration > 0 ? (current / duration) * 100 : 0;
+
+        if (this.dailyAudioProgressFill) {
+            this.dailyAudioProgressFill.style.width = `${Math.max(0, Math.min(100, progressPct))}%`;
+        }
+        if (this.dailyPlayPauseBtn) {
+            this.dailyPlayPauseBtn.textContent = this.audioPlayer.paused ? 'PLAY' : 'PAUSE';
+        }
+        if (this.dailyAudioTime) {
+            this.dailyAudioTime.textContent = `${this.formatTime(current)} / ${this.formatTime(duration)}`;
+        }
+    }
+
+    formatTime(seconds) {
+        const safe = Math.max(0, Math.floor(seconds || 0));
+        const mins = Math.floor(safe / 60);
+        const secs = String(safe % 60).padStart(2, '0');
+        return `${mins}:${secs}`;
     }
 
     clearFreeplayTimers() {
