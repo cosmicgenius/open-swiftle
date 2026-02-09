@@ -880,6 +880,16 @@ export class SwiftleGame {
         if (!this.guessSuggestions) return;
 
         const normalizedQuery = this.normalizeSearch(queryText);
+        if (normalizedQuery.length < 3) {
+            this.filteredSongs = [];
+            this.selectedSongId = null;
+            this.activeSuggestionIndex = -1;
+            this.guessSuggestions.innerHTML = '';
+            this.guessSuggestions.classList.add('hidden');
+            this.updateSubmitState();
+            return;
+        }
+
         const queryLength = normalizedQuery.length;
 
         const ranked = this.allSongs
