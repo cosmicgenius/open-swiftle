@@ -395,19 +395,51 @@ export class SwiftleGame {
             this.guessSearchInput.disabled = false;
             this.guessSearchInput.focus();
             this.updateClipDurationLabel(6);
-            this.startFreeplayCountdown(roundToken);
+            this.startFreeplayCountdownOnPlayback(roundToken);
 
             // Auto-play the 6s clip
             try {
                 this.audioPlayer.currentTime = 0;
                 await this.audioPlayer.play();
             } catch {
-                // If autoplay is blocked, keep controls visible and let user play manually.
+                // Fallback if autoplay fails: start countdown immediately.
+                if (roundToken === this.freeplayRoundToken && !this.gameCompleted) {
+                    this.startFreeplayCountdown(roundToken);
+                }
             }
         } catch (error) {
             console.error('Freeplay error:', error);
             this.showError('Failed to load freeplay round');
         }
+    }
+
+    startFreeplayCountdownOnPlayback(roundToken) {
+        let started = false;
+        let fallbackTimeout = null;
+
+        const start = () => {
+            if (started) return;
+            started = true;
+            this.audioPlayer.removeEventListener('playing', onPlaying);
+            if (fallbackTimeout) {
+                clearTimeout(fallbackTimeout);
+                fallbackTimeout = null;
+            }
+            this.startFreeplayCountdown(roundToken);
+        };
+
+        const onPlaying = () => {
+            if (roundToken !== this.freeplayRoundToken || this.gameCompleted) return;
+            start();
+        };
+
+        this.audioPlayer.addEventListener('playing', onPlaying, { once: true });
+
+        // Safety fallback: avoid hanging the round if 'playing' never fires.
+        fallbackTimeout = setTimeout(() => {
+            if (roundToken !== this.freeplayRoundToken || this.gameCompleted) return;
+            start();
+        }, 1200);
     }
 
     async submitGuess() {
