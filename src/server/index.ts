@@ -142,7 +142,8 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
       if (guess > 6) {
         return res.status(400).json({ error: 'Invalid guess number' });
       }
-      if (guess > currentGuess + 1) {
+      // After completion, allow replaying the full 6s clip.
+      if (!session.completed && guess > currentGuess + 1) {
         return res.status(403).json({ error: 'Cannot access future clips' });
       }
     } else {

@@ -198,12 +198,13 @@ export class SwiftleGame {
             this.audioPlayer.style.display = '';
             this.freeplayProgressWrap.classList.add('hidden');
             this.freeplayScoreRow.classList.add('hidden');
-            this.updateClipDurationLabel(this.currentGuess);
+            const clipToLoad = this.gameCompleted ? 6 : this.currentGuess;
+            this.updateClipDurationLabel(clipToLoad);
             this.renderDailyGuessTrack();
             this.renderCounter(status.guessesRemaining);
             this.guessInputArea?.classList.remove('hidden');
 
-            await this.preloadAudioClip(this.currentGuess);
+            await this.preloadAudioClip(clipToLoad);
             this.showGameArea();
             this.refreshDailyShareVisibility();
 
@@ -521,6 +522,11 @@ export class SwiftleGame {
                     if (this.currentMode === 'freeplay') this.startNewGame(true);
                 }, 500);
                 return;
+            }
+
+            if (this.currentMode === 'daily') {
+                this.updateClipDurationLabel(6);
+                void this.preloadAudioClip(6);
             }
 
             this.showGameResult(result);
