@@ -21,6 +21,7 @@ export class SwiftleGame {
         this.freeplayFeedbackTimeoutId = null;
         this.freeplayHardMode = false;
         this.freeplayClipSeconds = 6;
+        this.dailyMaxGuesses = 6;
         this.freeplayScore = 0;
         this.freeplayBestScore = Number(localStorage.getItem('swiftle_freeplay_best_score') || 0);
         this.shareUrl = window.location.origin;
@@ -179,7 +180,8 @@ export class SwiftleGame {
 
             this.sessionId = status.sessionId;
             this.currentMode = 'daily';
-            this.maxGuesses = status.maxGuesses ?? 6;
+            this.maxGuesses = status.maxGuesses ?? this.dailyMaxGuesses;
+            this.dailyMaxGuesses = this.maxGuesses;
             if (typeof status.freeplayClipSeconds === 'number' && status.freeplayClipSeconds >= 1) {
                 this.freeplayClipSeconds = Math.floor(status.freeplayClipSeconds);
             }
@@ -188,8 +190,8 @@ export class SwiftleGame {
 
             const totalGuesses = this.dailyGuessHistory.length;
             this.currentGuess = this.gameCompleted
-                ? Math.min(6, Math.max(1, totalGuesses))
-                : Math.min(6, totalGuesses + 1);
+                ? Math.min(this.maxGuesses, Math.max(1, totalGuesses))
+                : Math.min(this.maxGuesses, totalGuesses + 1);
 
             this.setHistoryVisible(true);
             this.setDailyAudioVisible(true);
@@ -198,7 +200,7 @@ export class SwiftleGame {
             this.audioPlayer.style.display = '';
             this.freeplayProgressWrap.classList.add('hidden');
             this.freeplayScoreRow.classList.add('hidden');
-            const clipToLoad = this.gameCompleted ? 6 : this.currentGuess;
+            const clipToLoad = this.gameCompleted ? this.maxGuesses : this.currentGuess;
             this.updateClipDurationLabel(clipToLoad);
             this.renderDailyGuessTrack();
             this.renderCounter(status.guessesRemaining);
@@ -322,6 +324,9 @@ export class SwiftleGame {
             this.currentMode = data.mode;
             this.freeplayHardMode = data.freeplayHard === true;
             this.maxGuesses = data.maxGuesses;
+            if (data.mode === 'daily' && typeof data.maxGuesses === 'number' && data.maxGuesses >= 1) {
+                this.dailyMaxGuesses = Math.floor(data.maxGuesses);
+            }
             if (typeof data.freeplayClipSeconds === 'number' && data.freeplayClipSeconds >= 1) {
                 this.freeplayClipSeconds = Math.floor(data.freeplayClipSeconds);
             }
@@ -525,8 +530,8 @@ export class SwiftleGame {
             }
 
             if (this.currentMode === 'daily') {
-                this.updateClipDurationLabel(6);
-                void this.preloadAudioClip(6);
+                this.updateClipDurationLabel(this.maxGuesses);
+                void this.preloadAudioClip(this.maxGuesses);
             }
 
             this.showGameResult(result);
@@ -700,6 +705,9 @@ export class SwiftleGame {
             }
             if (typeof config.freeplayClipSeconds === 'number' && config.freeplayClipSeconds >= 1) {
                 this.freeplayClipSeconds = Math.floor(config.freeplayClipSeconds);
+            }
+            if (typeof config.dailyMaxGuesses === 'number' && config.dailyMaxGuesses >= 1) {
+                this.dailyMaxGuesses = Math.floor(config.dailyMaxGuesses);
             }
         } catch {
             // Keep default share URL.
@@ -937,10 +945,10 @@ export class SwiftleGame {
             return `Open Swiftle Freeplay\n\nScore: ${this.freeplayScore}\n\n${this.shareUrl}`;
         }
 
-        const results = Array(6).fill('⬜');
+        const results = Array(this.maxGuesses).fill('⬜');
         this.dailyGuessHistory.forEach((entry) => {
             const index = Number(entry.guessNumber) - 1;
-            if (index < 0 || index >= 6) return;
+            if (index < 0 || index >= this.maxGuesses) return;
             results[index] = this.getShareSymbol(entry.matchLevel);
         });
 
@@ -1009,7 +1017,7 @@ export class SwiftleGame {
 
     updateClipDurationLabel(revealedSeconds) {
         if (!this.clipDuration) return;
-        const maxSeconds = this.currentMode === 'freeplay' ? this.freeplayClipSeconds : 6;
+        const maxSeconds = this.currentMode === 'freeplay' ? this.freeplayClipSeconds : this.maxGuesses;
         const seconds = Math.max(1, Math.min(maxSeconds, Number(revealedSeconds) || 1));
         this.clipDuration.textContent = `${seconds}s revealed`;
     }
@@ -1142,7 +1150,7 @@ export class SwiftleGame {
 
         this.dailyGuessTrack.innerHTML = '';
         let mountedCurrentInput = false;
-        for (let guessNumber = 1; guessNumber <= 6; guessNumber++) {
+        for (let guessNumber = 1; guessNumber <= this.maxGuesses; guessNumber++) {
             const box = document.createElement('div');
             box.className = 'daily-guess-box';
 

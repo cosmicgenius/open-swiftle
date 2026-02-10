@@ -24,7 +24,8 @@ installTimestampedConsoleLog();
 
 const db = new Database();
 const clipCache = new ClipCache();
-const gameLogic = new GameLogic(db);
+const DAILY_MAX_GUESSES = Math.max(1, Number(process.env.DAILY_MAX_GUESSES || 6));
+const gameLogic = new GameLogic(db, { dailyMaxGuesses: DAILY_MAX_GUESSES });
 const FREEPLAY_SHARED_CACHE_KEY = 'freeplay-shared';
 const FREEPLAY_CLIP_TTL_MS = Number(process.env.FREEPLAY_CLIP_TTL_MS || 5 * 60 * 1000);
 const FREEPLAY_POOL_REFRESH_MS = Number(process.env.FREEPLAY_POOL_REFRESH_MS || 5 * 60 * 1000);
@@ -104,7 +105,7 @@ app.post('/api/game/start', startLimiter, async (req, res) => {
       freeplayRound,
     });
 
-    const maxGuesses = mode === 'daily' ? 6 : session.freeplayHard ? 1 : null;
+    const maxGuesses = mode === 'daily' ? DAILY_MAX_GUESSES : session.freeplayHard ? 1 : null;
     res.json({
       sessionId: session.id,
       mode: session.mode,
@@ -139,7 +140,7 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
     // Daily: can access clip for current guess + 1 (progressive reveal)
     // Freeplay: only the configured clip length
     if (session.mode === 'daily') {
-      if (guess > 6) {
+      if (guess > DAILY_MAX_GUESSES) {
         return res.status(400).json({ error: 'Invalid guess number' });
       }
       // After completion, allow replaying the full 6s clip.
@@ -163,7 +164,9 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
     const startTime = session.start_time;
     const cacheKey = session.mode === 'daily' ? session.date! : FREEPLAY_SHARED_CACHE_KEY;
     const clipDurations =
-      session.mode === 'daily' ? [1, 2, 3, 4, 5, 6] : [FREEPLAY_CLIP_SECONDS];
+      session.mode === 'daily'
+        ? Array.from({ length: DAILY_MAX_GUESSES }, (_, idx) => idx + 1)
+        : [FREEPLAY_CLIP_SECONDS];
     const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations, {
       ttlMs: session.mode === 'freeplay' ? FREEPLAY_CLIP_TTL_MS : undefined,
     });
@@ -278,7 +281,8 @@ app.get('/api/game/:sessionId/status', statusLimiter, async (req, res) => {
     }
 
     const song = await db.getSongById(session.song_id);
-    const maxGuesses = session.mode === 'daily' ? 6 : session.freeplay_hard ? 1 : null;
+    const maxGuesses =
+      session.mode === 'daily' ? DAILY_MAX_GUESSES : session.freeplay_hard ? 1 : null;
 
     res.json({
       sessionId: session.id,
@@ -320,6 +324,7 @@ app.get('/api/config', (_req, res) => {
   res.json({
     shareUrl: PUBLIC_SHARE_URL,
     freeplayClipSeconds: FREEPLAY_CLIP_SECONDS,
+    dailyMaxGuesses: DAILY_MAX_GUESSES,
   });
 });
 
@@ -340,7 +345,7 @@ app.listen(PORT, () => {
     console.error('Failed to start freeplay pool:', error);
   });
   console.log(
-    `Freeplay pool active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", clipSeconds=${FREEPLAY_CLIP_SECONDS}, ttl=${FREEPLAY_CLIP_TTL_MS}ms, refresh=${FREEPLAY_POOL_REFRESH_MS}ms)`
+    `Freeplay pool active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", clipSeconds=${FREEPLAY_CLIP_SECONDS}, dailyMaxGuesses=${DAILY_MAX_GUESSES}, ttl=${FREEPLAY_CLIP_TTL_MS}ms, refresh=${FREEPLAY_POOL_REFRESH_MS}ms)`
   );
 });
 

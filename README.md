@@ -5,7 +5,7 @@ A music guessing game inspired by [Swiftle](https://www.techyonic.co/swiftle) an
 ## Game Modes
 
 ### Daily Mode
-One song per day, shared across all players. You get 6 guesses, and each wrong guess reveals one more second of audio (1s, 2s, ..., 6s). Same song and starting point for everyone on a given day.
+One song per day, shared across all players. You get configurable daily guesses (default 6), and each wrong guess reveals one more second of audio up to that limit. Same song and starting point for everyone on a given day.
 
 - Route: `/`
 - Auto-starts on page load
@@ -96,6 +96,7 @@ cloudflared tunnel --url http://localhost:3000
 |---|---|---|
 | `DAILY_SEED_SECRET` | Yes | Secret mixed with date to determine daily song. Change this to make your daily picks unpredictable even with public code. |
 | `PORT` | No | Server port (default: 3000) |
+| `DAILY_MAX_GUESSES` | No | Daily mode max guesses and max reveal seconds (default: `6`). |
 | `FREEPLAY_CLIP_TTL_MS` | No | TTL for shared freeplay clips on disk and in memory (default: `300000` / 5 min). |
 | `FREEPLAY_POOL_REFRESH_MS` | No | Background refresh interval for adding a new freeplay pool entry (default: `300000` / 5 min). |
 | `FREEPLAY_POOL_MIN_SIZE` | No | Minimum number of prewarmed freeplay entries to keep available (default: `12`). |
@@ -144,7 +145,7 @@ Three tables:
 
 Full song files never leave the server. Instead, clips are generated on demand via FFmpeg and cached to disk as base64-encoded JSON.
 
-**Daily mode:** Clips are keyed by date. The first player to request a daily clip triggers generation of all 6 durations (1s through 6s). Every subsequent request that day is served from cache.
+**Daily mode:** Clips are keyed by date. The first player to request a daily clip triggers generation of all daily durations (1s through `DAILY_MAX_GUESSES`). Every subsequent request that day is served from cache.
 
 **Freeplay mode:** Clips use a shared cache key (`freeplay-shared`) and are selected from a shared prewarmed pool of `(song, startTime)` entries. A background timer adds a new pooled clip at a fixed interval (default: every 5 minutes).
 

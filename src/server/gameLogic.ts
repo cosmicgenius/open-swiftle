@@ -43,9 +43,11 @@ export interface GuessResponse extends GuessResult {
 
 export class GameLogic {
   private db: Database;
+  private dailyMaxGuesses: number;
 
-  constructor(db: Database) {
+  constructor(db: Database, options?: { dailyMaxGuesses?: number }) {
     this.db = db;
+    this.dailyMaxGuesses = Math.max(1, options?.dailyMaxGuesses ?? 6);
   }
 
   async getDailySong(date?: string): Promise<DailySong> {
@@ -61,7 +63,7 @@ export class GameLogic {
     const songIndex = this.seededRandom(seedValue, 0, songs.length - 1);
     const selectedSong = songs[songIndex];
 
-    const maxStartTime = Math.max(0, selectedSong.duration - 10);
+    const maxStartTime = Math.max(0, selectedSong.duration - (this.dailyMaxGuesses + 4));
     const startTime = this.seededRandom(seedValue + 1, 0, maxStartTime);
 
     await this.db.setDailySong(gameDate, selectedSong.id, startTime);
@@ -256,7 +258,7 @@ export class GameLogic {
   }
 
   private getMaxGuesses(mode: 'daily' | 'freeplay', freeplayHard: boolean): number | null {
-    if (mode === 'daily') return 6;
+    if (mode === 'daily') return this.dailyMaxGuesses;
     return freeplayHard ? 1 : null;
   }
 
