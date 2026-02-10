@@ -31,6 +31,7 @@ const FREEPLAY_POOL_REFRESH_MS = Number(process.env.FREEPLAY_POOL_REFRESH_MS || 
 const FREEPLAY_POOL_MIN_SIZE = Number(process.env.FREEPLAY_POOL_MIN_SIZE || 12);
 const FREEPLAY_POOL_MAX_SIZE = Number(process.env.FREEPLAY_POOL_MAX_SIZE || 30);
 const FREEPLAY_AUDIO_MAX_AGE_SECONDS = Number(process.env.FREEPLAY_AUDIO_MAX_AGE_SECONDS || 60);
+const FREEPLAY_CLIP_SECONDS = Math.max(1, Number(process.env.FREEPLAY_CLIP_SECONDS || 6));
 const PUBLIC_SHARE_URL = process.env.PUBLIC_SHARE_URL || 'https://open-swiftle.example';
 const freeplayPool = new FreeplayPool(db, clipCache, {
   cacheKey: FREEPLAY_SHARED_CACHE_KEY,
@@ -38,6 +39,7 @@ const freeplayPool = new FreeplayPool(db, clipCache, {
   refreshMs: FREEPLAY_POOL_REFRESH_MS,
   minSize: FREEPLAY_POOL_MIN_SIZE,
   maxSize: FREEPLAY_POOL_MAX_SIZE,
+  clipSeconds: FREEPLAY_CLIP_SECONDS,
 });
 
 interface RateLimitEntry {
@@ -107,6 +109,7 @@ app.post('/api/game/start', startLimiter, async (req, res) => {
       sessionId: session.id,
       mode: session.mode,
       freeplayHard: session.freeplayHard,
+      freeplayClipSeconds: FREEPLAY_CLIP_SECONDS,
       maxGuesses,
       guessesRemaining: maxGuesses === null ? null : maxGuesses,
       completed: false,
@@ -122,8 +125,7 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
   try {
     const { sessionId, guessNumber } = req.params;
     const guess = parseInt(guessNumber, 10);
-
-    if (guess < 1 || guess > 6) {
+    if (!Number.isInteger(guess) || guess < 1) {
       return res.status(400).json({ error: 'Invalid guess number' });
     }
 
@@ -135,14 +137,19 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
     const currentGuess = (session.guesses ?? []).length;
 
     // Daily: can access clip for current guess + 1 (progressive reveal)
-    // Freeplay: only clip 6 (the single 6s clip)
+    // Freeplay: only the configured clip length
     if (session.mode === 'daily') {
+      if (guess > 6) {
+        return res.status(400).json({ error: 'Invalid guess number' });
+      }
       if (guess > currentGuess + 1) {
         return res.status(403).json({ error: 'Cannot access future clips' });
       }
     } else {
-      if (guess !== 6) {
-        return res.status(400).json({ error: 'Freeplay only has a 6s clip' });
+      if (guess !== FREEPLAY_CLIP_SECONDS) {
+        return res.status(400).json({
+          error: `Freeplay only has a ${FREEPLAY_CLIP_SECONDS}s clip`
+        });
       }
     }
 
@@ -154,7 +161,8 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
     // Both modes: use start_time stored on the session
     const startTime = session.start_time;
     const cacheKey = session.mode === 'daily' ? session.date! : FREEPLAY_SHARED_CACHE_KEY;
-    const clipDurations = session.mode === 'daily' ? [1, 2, 3, 4, 5, 6] : [6];
+    const clipDurations =
+      session.mode === 'daily' ? [1, 2, 3, 4, 5, 6] : [FREEPLAY_CLIP_SECONDS];
     const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations, {
       ttlMs: session.mode === 'freeplay' ? FREEPLAY_CLIP_TTL_MS : undefined,
     });
@@ -275,6 +283,7 @@ app.get('/api/game/:sessionId/status', statusLimiter, async (req, res) => {
       sessionId: session.id,
       mode: session.mode,
       freeplayHard: session.freeplay_hard,
+      freeplayClipSeconds: FREEPLAY_CLIP_SECONDS,
       guesses: session.guesses ?? [],
       maxGuesses,
       guessesRemaining:
@@ -309,6 +318,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/config', (_req, res) => {
   res.json({
     shareUrl: PUBLIC_SHARE_URL,
+    freeplayClipSeconds: FREEPLAY_CLIP_SECONDS,
   });
 });
 
@@ -329,7 +339,7 @@ app.listen(PORT, () => {
     console.error('Failed to start freeplay pool:', error);
   });
   console.log(
-    `Freeplay pool active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", ttl=${FREEPLAY_CLIP_TTL_MS}ms, refresh=${FREEPLAY_POOL_REFRESH_MS}ms)`
+    `Freeplay pool active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", clipSeconds=${FREEPLAY_CLIP_SECONDS}, ttl=${FREEPLAY_CLIP_TTL_MS}ms, refresh=${FREEPLAY_POOL_REFRESH_MS}ms)`
   );
 });
 

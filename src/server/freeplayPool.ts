@@ -7,6 +7,7 @@ interface FreeplayPoolOptions {
   refreshMs: number;
   minSize: number;
   maxSize: number;
+  clipSeconds: number;
 }
 
 interface FreeplayEntry {
@@ -119,7 +120,7 @@ export class FreeplayPool {
       this.options.cacheKey,
       selection.song,
       selection.startTime,
-      [6],
+      [this.options.clipSeconds],
       { ttlMs: this.options.ttlMs }
     );
 
@@ -144,7 +145,7 @@ export class FreeplayPool {
 
   private pickRandomSongAndStart(songs: Song[]): { song: Song; startTime: number } {
     const song = songs[Math.floor(Math.random() * songs.length)];
-    const maxStartTime = Math.max(0, song.duration - 10);
+    const maxStartTime = Math.max(0, song.duration - (this.options.clipSeconds + 4));
     const startTime = Math.random() * maxStartTime;
     return { song, startTime };
   }

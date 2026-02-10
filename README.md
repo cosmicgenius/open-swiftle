@@ -13,11 +13,11 @@ One song per day, shared across all players. You get 6 guesses, and each wrong g
 - Shows previous guesses and song/album feedback
 
 ### Freeplay Mode
-A fast reaction loop around a 6-second clip timer.
+A fast reaction loop around a configurable clip timer.
 
 - Route: `/freeplay`
 - Start screen with mode options, then autoplay
-- **Normal:** unlimited guesses until 6-second timeout
+- **Normal:** unlimited guesses until clip timeout
 - **Hard mode:** one wrong guess ends the round
 - Correct guess immediately starts next round
 - Tracks `Score` and persistent `Best` score locally
@@ -101,6 +101,7 @@ cloudflared tunnel --url http://localhost:3000
 | `FREEPLAY_POOL_MIN_SIZE` | No | Minimum number of prewarmed freeplay entries to keep available (default: `12`). |
 | `FREEPLAY_POOL_MAX_SIZE` | No | Maximum in-memory freeplay pool size before trimming old entries (default: `30`). |
 | `FREEPLAY_AUDIO_MAX_AGE_SECONDS` | No | Browser cache max-age for freeplay audio responses (default: `60`). |
+| `FREEPLAY_CLIP_SECONDS` | No | Freeplay clip length in seconds (default: `6`). |
 
 ## Project Structure
 

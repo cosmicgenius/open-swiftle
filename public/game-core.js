@@ -20,6 +20,7 @@ export class SwiftleGame {
         this.freeplayRoundToken = 0;
         this.freeplayFeedbackTimeoutId = null;
         this.freeplayHardMode = false;
+        this.freeplayClipSeconds = 6;
         this.freeplayScore = 0;
         this.freeplayBestScore = Number(localStorage.getItem('swiftle_freeplay_best_score') || 0);
         this.shareUrl = window.location.origin;
@@ -179,6 +180,9 @@ export class SwiftleGame {
             this.sessionId = status.sessionId;
             this.currentMode = 'daily';
             this.maxGuesses = status.maxGuesses ?? 6;
+            if (typeof status.freeplayClipSeconds === 'number' && status.freeplayClipSeconds >= 1) {
+                this.freeplayClipSeconds = Math.floor(status.freeplayClipSeconds);
+            }
             this.gameCompleted = Boolean(status.completed);
             this.dailyGuessHistory = this.mapDailyGuessHistory(status.guesses ?? []);
 
@@ -317,6 +321,9 @@ export class SwiftleGame {
             this.currentMode = data.mode;
             this.freeplayHardMode = data.freeplayHard === true;
             this.maxGuesses = data.maxGuesses;
+            if (typeof data.freeplayClipSeconds === 'number' && data.freeplayClipSeconds >= 1) {
+                this.freeplayClipSeconds = Math.floor(data.freeplayClipSeconds);
+            }
             if (data.mode === 'daily') {
                 this.storeDailySessionId(data.sessionId);
             }
@@ -383,7 +390,7 @@ export class SwiftleGame {
         this.clearFreeplayTimers();
 
         try {
-            await this.preloadAudioClip(6);
+            await this.preloadAudioClip(this.freeplayClipSeconds);
             this.showGameArea();
             this.setDailyAudioVisible(false);
             this.audioPlayer.controls = false;
@@ -394,7 +401,7 @@ export class SwiftleGame {
             this.renderFreeplayScore();
             this.guessSearchInput.disabled = false;
             this.guessSearchInput.focus();
-            this.updateClipDurationLabel(6);
+            this.updateClipDurationLabel(this.freeplayClipSeconds);
             this.startFreeplayCountdownOnPlayback(roundToken);
 
             // Auto-play the 6s clip
@@ -685,6 +692,9 @@ export class SwiftleGame {
             if (typeof config.shareUrl === 'string' && config.shareUrl.trim().length > 0) {
                 this.shareUrl = config.shareUrl.trim();
             }
+            if (typeof config.freeplayClipSeconds === 'number' && config.freeplayClipSeconds >= 1) {
+                this.freeplayClipSeconds = Math.floor(config.freeplayClipSeconds);
+            }
         } catch {
             // Keep default share URL.
         }
@@ -726,7 +736,7 @@ export class SwiftleGame {
         if (heading) heading.textContent = 'Freeplay';
         if (description) {
             description.textContent =
-                'Click start to hear a 6-second clip. If you get it before it ends, a new clip begins immediately. Guess as many as you can.';
+                `Click start to hear a ${this.freeplayClipSeconds}-second clip. If you get it before it ends, a new clip begins immediately. Guess as many as you can.`;
         }
         this.freeplayOptions.classList.remove('hidden');
         this.startGameBtn.textContent = 'Start Freeplay';
@@ -734,7 +744,7 @@ export class SwiftleGame {
 
     startFreeplayCountdown(roundToken) {
         const startedAt = Date.now();
-        const durationMs = 6000;
+        const durationMs = this.freeplayClipSeconds * 1000;
 
         this.freeplayIntervalId = setInterval(() => {
             if (roundToken !== this.freeplayRoundToken || this.gameCompleted) return;
@@ -993,7 +1003,8 @@ export class SwiftleGame {
 
     updateClipDurationLabel(revealedSeconds) {
         if (!this.clipDuration) return;
-        const seconds = Math.max(1, Math.min(6, Number(revealedSeconds) || 1));
+        const maxSeconds = this.currentMode === 'freeplay' ? this.freeplayClipSeconds : 6;
+        const seconds = Math.max(1, Math.min(maxSeconds, Number(revealedSeconds) || 1));
         this.clipDuration.textContent = `${seconds}s revealed`;
     }
 
