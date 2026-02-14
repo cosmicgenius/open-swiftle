@@ -1055,7 +1055,7 @@ export class SwiftleGame {
         if (!this.guessSuggestions) return;
 
         const normalizedQuery = this.normalizeSearch(queryText);
-        if (normalizedQuery.length < 3) {
+        if (normalizedQuery.length == 0) {
             this.filteredSongs = [];
             this.selectedSongId = null;
             this.activeSuggestionIndex = -1;
@@ -1067,12 +1067,24 @@ export class SwiftleGame {
 
         const queryLength = normalizedQuery.length;
 
-        const ranked = this.allSongs
+        const allMatches = this.allSongs
             .map((song) => ({
                 song,
                 score: this.getSongMatchScore(song, normalizedQuery)
             }))
             .filter((entry) => entry.score !== null)
+
+        if (allMatches.length > 20) {
+            this.filteredSongs = [];
+            this.selectedSongId = null;
+            this.activeSuggestionIndex = -1;
+            this.guessSuggestions.innerHTML = '';
+            this.guessSuggestions.classList.add('hidden');
+            this.updateSubmitState();
+            return;
+        }
+
+        const ranked = allMatches
             .sort((a, b) => {
                 if (a.score !== b.score) return a.score - b.score;
                 const aLengthDelta = Math.abs(a.song.title.length - queryLength);
@@ -1081,7 +1093,6 @@ export class SwiftleGame {
                 if (a.song.title.length !== b.song.title.length) return a.song.title.length - b.song.title.length;
                 return a.song.title.localeCompare(b.song.title);
             })
-            .slice(0, 100);
 
         this.filteredSongs = ranked.map(({ song }) => song);
 
