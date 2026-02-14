@@ -97,10 +97,7 @@ cloudflared tunnel --url http://localhost:3000
 | `DAILY_SEED_SECRET` | Yes | Secret mixed with date to determine daily song. Change this to make your daily picks unpredictable even with public code. |
 | `PORT` | No | Server port (default: 3000) |
 | `DAILY_MAX_GUESSES` | No | Daily mode max guesses and max reveal seconds (default: `6`). |
-| `FREEPLAY_CLIP_TTL_MS` | No | TTL for shared freeplay clips on disk and in memory (default: `300000` / 5 min). |
-| `FREEPLAY_POOL_REFRESH_MS` | No | Background refresh interval for adding a new freeplay pool entry (default: `300000` / 5 min). |
-| `FREEPLAY_POOL_MIN_SIZE` | No | Minimum number of prewarmed freeplay entries to keep available (default: `12`). |
-| `FREEPLAY_POOL_MAX_SIZE` | No | Maximum in-memory freeplay pool size before trimming old entries (default: `30`). |
+| `FREEPLAY_WARMUP_INTERVAL_MS` | No | Background freeplay cache warmup interval in ms. One clip key is generated per tick (default: `2000`). |
 | `FREEPLAY_AUDIO_MAX_AGE_SECONDS` | No | Browser cache max-age for freeplay audio responses (default: `60`). |
 | `FREEPLAY_CLIP_SECONDS` | No | Freeplay clip length in seconds (default: `6`). |
 
@@ -114,7 +111,7 @@ open-swiftle/
       database.ts       # SQLite wrapper (songs, sessions, daily picks)
       gameLogic.ts      # Song selection, guess validation, seeded RNG
       clipCache.ts      # Audio clip generation + disk cache
-      freeplayPool.ts   # Shared freeplay clip pool + background refresh
+      freeplayCache.ts  # Freeplay cache index + throttled warmup
     scripts/
       setup.ts          # Song import CLI
   public/               # Frontend (vanilla HTML/CSS/JS)
@@ -147,13 +144,11 @@ Full song files never leave the server. Instead, clips are generated on demand v
 
 **Daily mode:** Clips are keyed by date. The first player to request a daily clip triggers generation of all daily durations (1s through `DAILY_MAX_GUESSES`). Every subsequent request that day is served from cache.
 
-**Freeplay mode:** Clips use a shared cache key (`freeplay-shared`) and are selected from a shared prewarmed pool of `(song, startTime)` entries. A background timer adds a new pooled clip at a fixed interval (default: every 5 minutes).
+**Freeplay mode:** Clips use a shared cache key (`freeplay-shared`) and are selected only from entries that already exist on disk. A throttled warmup worker incrementally fills missing `(song, startTime)` keys in the background.
 
 FFmpeg pipes the clip directly to a buffer (no temp files on disk). The buffer is base64-encoded and written to a JSON file in `audio/cache/`. On subsequent requests, the server reads the JSON, decodes the base64, and streams the MP3 bytes.
 
-Freeplay TTL is applied in both places:
-- In-memory pool entries expire after `FREEPLAY_CLIP_TTL_MS`.
-- Disk cache entries for freeplay are treated as stale after the same TTL and regenerated when needed.
+Freeplay clips are not TTL-expired and are reused indefinitely once generated.
 
 **Why base64 JSON and not raw MP3 files?** The cache stores metadata alongside the audio (song ID, start time, generation timestamp). This makes it easy to inspect, debug, and extend without a separate metadata store.
 
@@ -177,7 +172,7 @@ Freeplay TTL is applied in both places:
 
 1. **Blob preloading.** The frontend fetches audio clips as blobs via `fetch()` and converts them to object URLs (`URL.createObjectURL`). By the time the user presses play, the audio data is already in browser memory. No network round-trip on playback.
 
-2. **Disk cache + shared freeplay pool.** Daily clips are generated once per date and reused all day. Freeplay uses a shared prewarmed pool and shared disk key so all sessions can reuse prepared clips.
+2. **Disk cache + shared freeplay cache index.** Daily clips are generated once per date and reused all day. Freeplay selects only from already-cached shared keys, while warmup runs at a controlled pace in the background.
 
 3. **FFmpeg pipe streaming.** Clips are extracted via FFmpeg's pipe output, avoiding intermediate temp files and extra disk I/O.
 

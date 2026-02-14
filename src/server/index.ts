@@ -8,7 +8,7 @@ dotenv.config();
 import { Database } from './database';
 import { GameLogic } from './gameLogic';
 import { ClipCache } from './clipCache';
-import { FreeplayPool } from './freeplayPool';
+import { FreeplayCache } from './freeplayCache';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,20 +27,14 @@ const clipCache = new ClipCache();
 const DAILY_MAX_GUESSES = Math.max(1, Number(process.env.DAILY_MAX_GUESSES || 6));
 const gameLogic = new GameLogic(db, { dailyMaxGuesses: DAILY_MAX_GUESSES });
 const FREEPLAY_SHARED_CACHE_KEY = 'freeplay-shared';
-const FREEPLAY_CLIP_TTL_MS = Number(process.env.FREEPLAY_CLIP_TTL_MS || 5 * 60 * 1000);
-const FREEPLAY_POOL_REFRESH_MS = Number(process.env.FREEPLAY_POOL_REFRESH_MS || 5 * 60 * 1000);
-const FREEPLAY_POOL_MIN_SIZE = Number(process.env.FREEPLAY_POOL_MIN_SIZE || 12);
-const FREEPLAY_POOL_MAX_SIZE = Number(process.env.FREEPLAY_POOL_MAX_SIZE || 30);
+const FREEPLAY_WARMUP_INTERVAL_MS = Number(process.env.FREEPLAY_WARMUP_INTERVAL_MS || 2000);
 const FREEPLAY_AUDIO_MAX_AGE_SECONDS = Number(process.env.FREEPLAY_AUDIO_MAX_AGE_SECONDS || 60);
 const FREEPLAY_CLIP_SECONDS = Math.max(1, Number(process.env.FREEPLAY_CLIP_SECONDS || 6));
 const PUBLIC_SHARE_URL = process.env.PUBLIC_SHARE_URL || 'https://open-swiftle.example';
-const freeplayPool = new FreeplayPool(db, clipCache, {
+const freeplayCache = new FreeplayCache(db, clipCache, {
   cacheKey: FREEPLAY_SHARED_CACHE_KEY,
-  ttlMs: FREEPLAY_CLIP_TTL_MS,
-  refreshMs: FREEPLAY_POOL_REFRESH_MS,
-  minSize: FREEPLAY_POOL_MIN_SIZE,
-  maxSize: FREEPLAY_POOL_MAX_SIZE,
   clipSeconds: FREEPLAY_CLIP_SECONDS,
+  warmupIntervalMs: FREEPLAY_WARMUP_INTERVAL_MS,
 });
 
 interface RateLimitEntry {
@@ -98,7 +92,7 @@ app.post('/api/game/start', startLimiter, async (req, res) => {
 
     const freeplayRound =
       mode === 'freeplay'
-        ? await freeplayPool.getRound()
+        ? await freeplayCache.getRound()
         : undefined;
     const session = await gameLogic.createGameSession(mode, clientId, {
       freeplayHard: Boolean(freeplayHard),
@@ -117,6 +111,9 @@ app.post('/api/game/start', startLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Error starting game:', error);
+    if (error instanceof Error && error.message === 'No freeplay clips cached yet') {
+      return res.status(503).json({ error: 'Freeplay cache is warming up. Please retry shortly.' });
+    }
     res.status(500).json({ error: 'Failed to start game' });
   }
 });
@@ -167,9 +164,7 @@ app.get('/api/game/:sessionId/audio/:guessNumber', audioLimiter, async (req, res
       session.mode === 'daily'
         ? Array.from({ length: DAILY_MAX_GUESSES }, (_, idx) => idx + 1)
         : [FREEPLAY_CLIP_SECONDS];
-    const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations, {
-      ttlMs: session.mode === 'freeplay' ? FREEPLAY_CLIP_TTL_MS : undefined,
-    });
+    const clips = await clipCache.getClips(cacheKey, song, startTime, clipDurations);
     const clip = clips.find((c) => c.duration === guess);
 
     if (!clip?.data?.audioData) {
@@ -341,18 +336,18 @@ app.get('/freeplay', (_req, res) => {
 app.listen(PORT, () => {
   console.log(`Swiftle server running on port ${PORT}`);
   console.log(`Open http://localhost:${PORT} to play!`);
-  void freeplayPool.start().catch((error) => {
-    console.error('Failed to start freeplay pool:', error);
+  void freeplayCache.start().catch((error) => {
+    console.error('Failed to start freeplay cache:', error);
   });
   console.log(
-    `Freeplay pool active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", clipSeconds=${FREEPLAY_CLIP_SECONDS}, dailyMaxGuesses=${DAILY_MAX_GUESSES}, ttl=${FREEPLAY_CLIP_TTL_MS}ms, refresh=${FREEPLAY_POOL_REFRESH_MS}ms)`
+    `Freeplay cache active (shared cache key="${FREEPLAY_SHARED_CACHE_KEY}", clipSeconds=${FREEPLAY_CLIP_SECONDS}, dailyMaxGuesses=${DAILY_MAX_GUESSES}, warmupInterval=${FREEPLAY_WARMUP_INTERVAL_MS}ms)`
   );
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down gracefully...');
-  freeplayPool.stop();
+  freeplayCache.stop();
   db.close();
   clipCache.stop();
   process.exit(0);
